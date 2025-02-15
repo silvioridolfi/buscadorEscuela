@@ -90,16 +90,16 @@ export default function SchoolSearch() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Ingresar CUE, nombre de escuela o cualquier información requerida"
-          className="flex-grow bg-white text-black placeholder-gray-400"
+          className="flex-grow bg-white text-black placeholder-gray-400 rounded-md"
         />
-        <Button type="submit" disabled={loading} className="bg-[#e81f76] text-white hover:bg-[#e81f76]/90">
+        <Button type="submit" disabled={loading} className="bg-[#e81f76] text-white hover:bg-[#e81f76]/90 rounded-md">
           {loading ? "Buscando..." : "Buscar"}
         </Button>
         <Button
           type="button"
           onClick={handleClear}
           variant="outline"
-          className="border-[#e81f76] text-[#e81f76] hover:bg-[#e81f76]/10"
+          className="border-[#e81f76] text-[#e81f76] hover:bg-[#e81f76]/10 rounded-md"
         >
           Limpiar
         </Button>
@@ -116,7 +116,7 @@ export default function SchoolSearch() {
       {results.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {results.map((school) => (
-            <Card key={school.CUE} className="bg-white text-black border-2 border-[#e81f76]">
+            <Card key={school.CUE} className="bg-white text-black border-2 border-[#e81f76] rounded-md overflow-hidden">
               <CardHeader>
                 <CardTitle className="font-bold text-black">{school.ESTABLECIMIENTO}</CardTitle>
               </CardHeader>
