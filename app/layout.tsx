@@ -1,13 +1,13 @@
 import type React from "react"
 import "./globals.css"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Encode_Sans } from "next/font/google"
 
-const inter = Inter({ subsets: ["latin"] })
+const encodeSans = Encode_Sans({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "School Information Search",
-  description: "Search for school information from Google Sheets database",
+  title: "Buscador de establecimientos educativos",
+  description: "Busca información de escuelas desde la base de datos de Google Sheets",
     generator: 'v0.dev'
 }
 
@@ -17,8 +17,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>{children}</body>
+    <html lang="es">
+      <body className={`${encodeSans.className} bg-[#00AEC3]`}>{children}</body>
     </html>
   )
 }

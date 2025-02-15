@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useCallback } from "react"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -60,13 +59,13 @@ export default function SchoolSearch() {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || "An error occurred while fetching data")
+        throw new Error(data.error || "Ocurrió un error al buscar los datos")
       }
 
       setResults(data)
     } catch (error) {
-      console.error("Error in fetchResults:", error)
-      setError(error.message || "An unexpected error occurred")
+      console.error("Error en fetchResults:", error)
+      setError(error.message || "Ocurrió un error inesperado")
     } finally {
       setLoading(false)
     }
@@ -77,6 +76,12 @@ export default function SchoolSearch() {
     fetchResults()
   }
 
+  const handleClear = () => {
+    setQuery("")
+    setResults([])
+    setError(null)
+  }
+
   return (
     <div>
       <form onSubmit={handleSubmit} className="mb-4 flex gap-2">
@@ -84,11 +89,19 @@ export default function SchoolSearch() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Enter CUE, school name, or any other details"
-          className="flex-grow"
+          placeholder="Ingresar CUE, nombre de escuela o cualquier información requerida"
+          className="flex-grow bg-white text-black placeholder-gray-400"
         />
-        <Button type="submit" disabled={loading}>
-          {loading ? "Searching..." : "Search"}
+        <Button type="submit" disabled={loading} className="bg-[#e81f76] text-white hover:bg-[#e81f76]/90">
+          {loading ? "Buscando..." : "Buscar"}
+        </Button>
+        <Button
+          type="button"
+          onClick={handleClear}
+          variant="outline"
+          className="border-[#e81f76] text-[#e81f76] hover:bg-[#e81f76]/10"
+        >
+          Limpiar
         </Button>
       </form>
 
@@ -103,14 +116,14 @@ export default function SchoolSearch() {
       {results.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {results.map((school) => (
-            <Card key={school.CUE}>
+            <Card key={school.CUE} className="bg-white text-black border-2 border-[#e81f76]">
               <CardHeader>
-                <CardTitle>{school.ESTABLECIMIENTO}</CardTitle>
+                <CardTitle className="font-bold text-black">{school.ESTABLECIMIENTO}</CardTitle>
               </CardHeader>
               <CardContent>
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem value="item-1">
-                    <AccordionTrigger>Basic Information</AccordionTrigger>
+                    <AccordionTrigger className="text-black hover:text-black/90">Información Básica</AccordionTrigger>
                     <AccordionContent>
                       <ul className="space-y-2">
                         <li>
@@ -138,26 +151,28 @@ export default function SchoolSearch() {
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="item-2">
-                    <AccordionTrigger>Contact Information</AccordionTrigger>
+                    <AccordionTrigger className="text-black hover:text-black/90">
+                      Información de Contacto
+                    </AccordionTrigger>
                     <AccordionContent>
                       <ul className="space-y-2">
                         <li>
-                          <span className="font-semibold">NOMBRE:</span> {school.NOMBRE}
+                          <span className="font-semibold">NOMBRE:</span> {school.NOMBRE || "Sin datos"}
                         </li>
                         <li>
-                          <span className="font-semibold">APELLIDO:</span> {school.APELLIDO}
+                          <span className="font-semibold">APELLIDO:</span> {school.APELLIDO || "Sin datos"}
                         </li>
                         <li>
-                          <span className="font-semibold">CARGO:</span> {school.CARGO}
+                          <span className="font-semibold">CARGO:</span> {school.CARGO || "Sin datos"}
                         </li>
                         <li>
-                          <span className="font-semibold">TELÉFONO:</span> {school.TELEFONO}
+                          <span className="font-semibold">TELÉFONO:</span> {school.TELEFONO || "Sin datos"}
                         </li>
                       </ul>
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="item-3">
-                    <AccordionTrigger>Technical Information</AccordionTrigger>
+                    <AccordionTrigger className="text-black hover:text-black/90">Información Técnica</AccordionTrigger>
                     <AccordionContent>
                       <ul className="space-y-2">
                         <li>
@@ -220,7 +235,7 @@ export default function SchoolSearch() {
           ))}
         </div>
       ) : (
-        !loading && query.length > 0 && <p>No results found.</p>
+        !loading && query.length > 0 && <p className="text-white">No se encontraron resultados.</p>
       )}
     </div>
   )
