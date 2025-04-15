@@ -115,9 +115,13 @@ export default function SchoolSearch() {
     clearApiCache()
 
     // Focus the search input when the component mounts
-    if (searchInputRef.current) {
-      searchInputRef.current.focus()
-    }
+    // Usar un pequeño retraso para asegurar que el DOM esté completamente cargado
+    setTimeout(() => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus()
+        console.log("Search input focused")
+      }
+    }, 100)
   }, [])
 
   // Handle input change
@@ -490,9 +494,14 @@ export default function SchoolSearch() {
     setSharedPredios({})
     // Reiniciar el estado de búsqueda
     setHasSearched(false)
-    if (searchInputRef.current) {
-      searchInputRef.current.focus()
-    }
+
+    // Usar un pequeño retraso para asegurar que el DOM se actualice antes de enfocar
+    setTimeout(() => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus()
+        console.log("Search input focused after clear")
+      }
+    }, 50)
   }
 
   return (
@@ -514,6 +523,7 @@ export default function SchoolSearch() {
                   placeholder="Ingresar CUE o nombre de establecimiento"
                   className="w-full px-6 py-3 pl-12 rounded-xl border-2 border-white/30 focus:border-primary text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-lg bg-white/5 backdrop-blur-sm"
                   ref={searchInputRef}
+                  autoFocus
                 />
                 {query && (
                   <button
