@@ -7,16 +7,41 @@
   --secondary: #417099;
   --accent: #00aec3;
   --border-radius: 0.75rem;
+  --bg-gradient-start: #1a1a2e;
+  --bg-gradient-middle: #16213e;
+  --bg-gradient-end: #0f3460;
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-muted: rgba(255, 255, 255, 0.5);
+  --text-subtle: rgba(255, 255, 255, 0.3);
+  --card-bg: rgba(255, 255, 255, 0.1);
+  --card-border: rgba(255, 255, 255, 0.2);
+  --modal-bg: #1a1a2e;
+  --modal-header: linear-gradient(90deg, var(--primary), var(--secondary), var(--accent));
+  --modal-content: #16213e;
+  --modal-border: rgba(255, 255, 255, 0.1);
+  --amber-text: #ffc107;
+  --amber-bg: rgba(255, 193, 7, 0.2);
+  --amber-border: rgba(255, 193, 7, 0.3);
+  --separator-color: rgba(255, 255, 255, 0.3);
 }
 
 body {
-  background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+  background: linear-gradient(
+    135deg,
+    var(--bg-gradient-start),
+    var(--bg-gradient-middle),
+    var(--bg-gradient-end),
+    var(--bg-gradient-middle),
+    var(--bg-gradient-start)
+  );
   background-size: 400% 400%;
-  animation: gradientBackground 15s ease infinite;
+  animation: gradientBackground 20s ease infinite;
   margin: 0;
   padding: 20px;
   min-height: 100vh;
-  color: white;
+  color: var(--text-primary);
+  transition: background 0.5s ease;
 }
 
 @keyframes gradientBackground {

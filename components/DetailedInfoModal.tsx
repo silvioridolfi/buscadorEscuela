@@ -445,6 +445,7 @@ export default function DetailedInfoModal({
     { label: "ÁMBITO", value: currentSchool.AMBITO, icon: <Info className="w-4 h-4" /> },
     { label: "CUE ANTERIOR", value: currentSchool.CUE_ANTERIOR, icon: <Hash className="w-4 h-4" /> },
     { label: "RECLAMOS GRUPO 1 ANI", value: currentSchool.RECLAMOS_GRUPO_1_ANI, icon: <Info className="w-4 h-4" /> },
+    { label: "RECURSO PRIMARIO", value: currentSchool.RECURSO_PRIMARIO, icon: <Info className /> },
     { label: "RECURSO PRIMARIO", value: currentSchool.RECURSO_PRIMARIO, icon: <Info className="w-4 h-4" /> },
     { label: "Access ID", value: currentSchool.ACCESS_ID, icon: <Hash className="w-4 h-4" /> },
   ]
@@ -736,7 +737,7 @@ export default function DetailedInfoModal({
                         <ul className="space-y-2">
                           {currentSharedPredioInfo?.sharedWith.map((shared) => (
                             <li key={shared.CUE} className="text-sm text-amber-100 flex items-start gap-2">
-                              <span className="text-amber-400">•</span>
+                              <span className="text-amber-400 mr-1.5">•</span>
                               <div>
                                 <span className="font-medium">{getAbbreviatedSchoolName(shared.ESTABLECIMIENTO)}</span>
                                 <br />

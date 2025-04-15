@@ -21,20 +21,18 @@ export default function Footer() {
             {/* Separador horizontal para móvil */}
             <div className="md:hidden h-px w-48 bg-white/30 my-5 rounded-full"></div>
 
-            {/* Logo para desktop - tamaño de 90px */}
-            <img
-              src="/images/pba-logo.png"
-              alt="Gobierno de la Provincia de Buenos Aires"
-              className="h-[90px] hidden md:block"
-            />
+            {/* Logo para desktop */}
+            <div className="hidden md:block h-[80px]">
+              <img src="/images/pba-logo.png" alt="Gobierno de la Provincia de Buenos Aires" className="h-[80px]" />
+            </div>
           </div>
 
-          {/* Logo para móvil - con proporciones correctas */}
+          {/* Logo para móvil */}
           <div className="mt-3 md:hidden">
             <img
               src="/images/pba-logo.png"
               alt="Gobierno de la Provincia de Buenos Aires"
-              className="h-[90px] w-auto object-contain"
+              className="h-[80px] w-auto object-contain"
             />
           </div>
         </div>
