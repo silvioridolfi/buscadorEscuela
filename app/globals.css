@@ -2,17 +2,112 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --primary: #e81f76;
+  --secondary: #417099;
+  --accent: #00aec3;
+  --border-radius: 0.75rem;
+}
+
 body {
-  background-color: #00aec3;
+  background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+  background-size: 400% 400%;
+  animation: gradientBackground 15s ease infinite;
   margin: 0;
-  padding: 0;
+  padding: 20px;
   min-height: 100vh;
-  overflow-x: hidden;
+  color: white;
 }
 
-/* Ensure content is scrollable within the iframe */
-html,
-body {
-  overflow-y: auto;
+@keyframes gradientBackground {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.pba-gradient {
+  background: linear-gradient(135deg, #e81f76, #417099, #00aec3);
+}
+
+.pba-gradient-text {
+  background: linear-gradient(135deg, #e81f76, #417099, #00aec3);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Asegurar que los bordes redondeados se apliquen correctamente */
+.rounded-lg {
+  border-radius: var(--border-radius) !important;
+}
+
+.rounded-xl {
+  border-radius: calc(var(--border-radius) * 1.5) !important;
+}
+
+.rounded-2xl {
+  border-radius: calc(var(--border-radius) * 2) !important;
+}
+
+.rounded-full {
+  border-radius: 9999px !important;
+}
+
+/* Mejoras para scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Animaciones para secciones colapsables */
+.collapsible-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-in-out;
+}
+
+.collapsible-content.expanded {
+  max-height: 2000px; /* Valor alto para asegurar que todo el contenido sea visible */
+}
+
+/* Transiciones suaves para elementos UI */
+.section-transition {
+  transition: all 0.3s ease-in-out;
+}
+
+.rotate-transition {
+  transition: transform 0.3s ease-in-out;
+}

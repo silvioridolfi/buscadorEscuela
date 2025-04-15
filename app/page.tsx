@@ -1,16 +1,59 @@
 import SchoolSearch from "@/components/SchoolSearch"
-import { Encode_Sans } from "next/font/google"
+import SetupInstructions from "./setup-instructions"
+import { checkApiKeyConfigured } from "./api-key-check"
+import Footer from "@/components/Footer"
+import Image from "next/image"
+import ScrollToTopButton from "@/components/ScrollToTopButton"
 
-const encodeSans = Encode_Sans({ subsets: ["latin"] })
+export default async function Home() {
+  const isApiKeyConfigured = await checkApiKeyConfigured()
 
-export default function Home() {
   return (
-    <main className={`min-h-screen bg-[#00AEC3] text-white ${encodeSans.className}`}>
-      <div className="p-4">
-        <h1 className="mb-4 text-3xl font-bold">Buscador de establecimientos educativos</h1>
+    <main className="min-h-screen">
+      <div className="max-w-6xl mx-auto px-4">
+        <header className="py-16 mb-12">
+          <div className="flex flex-col items-center justify-center">
+            {/* Logo con efecto de resplandor */}
+            <div className="w-32 h-32 mb-8 bg-gradient-to-br from-primary via-secondary to-accent rounded-full backdrop-blur-md flex items-center justify-center overflow-hidden shadow-2xl relative">
+              {/* Círculo interior para mejorar el contraste */}
+              <div className="absolute inset-3 rounded-full bg-white/15 backdrop-blur-sm"></div>
+
+              {/* Efecto de resplandor detrás del logo */}
+              <div className="absolute w-24 h-24 bg-white/30 rounded-full filter blur-md animate-pulse-slow"></div>
+
+              {/* Usando la imagen proporcionada con mejor visibilidad */}
+              <div className="relative w-24 h-24 flex items-center justify-center z-10">
+                <Image
+                  src="/mi_escuela_1.png"
+                  alt="Icono de escuela"
+                  width={96}
+                  height={96}
+                  className="object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]"
+                  priority
+                />
+              </div>
+            </div>
+
+            {/* Título con efecto de resplandor */}
+            <h1 className="text-center text-white text-4xl md:text-5xl font-bold mb-6 drop-shadow-lg">
+              Buscador de establecimientos educativos
+            </h1>
+
+            {/* Subtítulo con efecto de vidrio */}
+            <div className="bg-white/15 px-8 py-3 rounded-full backdrop-blur-md border border-white/20 shadow-lg">
+              <p className="text-white text-center font-medium text-lg">Región 1</p>
+            </div>
+          </div>
+        </header>
+
+        {!isApiKeyConfigured && <SetupInstructions />}
         <SchoolSearch />
       </div>
+
+      <Footer />
+
+      {/* Botón para volver al inicio */}
+      <ScrollToTopButton />
     </main>
   )
 }
-
