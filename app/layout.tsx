@@ -3,6 +3,7 @@ import "./globals.css"
 import type { Metadata } from "next"
 import { Encode_Sans } from "next/font/google"
 import { Analytics } from "@vercel/analytics/react"
+import { Suspense } from "react" // Añadir esta importación
 
 const encodeSans = Encode_Sans({ subsets: ["latin"] })
 
@@ -30,12 +31,17 @@ export default function RootLayout({
         <meta httpEquiv="Expires" content="0" />
       </head>
       <body className={encodeSans.className}>
-        {children}
+        <Suspense
+          fallback={
+            <div className="min-h-screen flex items-center justify-center">
+              <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          }
+        >
+          {children}
+        </Suspense>
         <Analytics />
       </body>
     </html>
   )
 }
-
-
-import './globals.css'

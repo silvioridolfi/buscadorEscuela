@@ -445,7 +445,6 @@ export default function DetailedInfoModal({
     { label: "ÁMBITO", value: currentSchool.AMBITO, icon: <Info className="w-4 h-4" /> },
     { label: "CUE ANTERIOR", value: currentSchool.CUE_ANTERIOR, icon: <Hash className="w-4 h-4" /> },
     { label: "RECLAMOS GRUPO 1 ANI", value: currentSchool.RECLAMOS_GRUPO_1_ANI, icon: <Info className="w-4 h-4" /> },
-    { label: "RECURSO PRIMARIO", value: currentSchool.RECURSO_PRIMARIO, icon: <Info className /> },
     { label: "RECURSO PRIMARIO", value: currentSchool.RECURSO_PRIMARIO, icon: <Info className="w-4 h-4" /> },
     { label: "Access ID", value: currentSchool.ACCESS_ID, icon: <Hash className="w-4 h-4" /> },
   ]
@@ -470,9 +469,9 @@ export default function DetailedInfoModal({
       {/* Backdrop with blur effect */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
 
-      {/* Modal Content */}
+      {/* Modal Content - Ahora a pantalla completa */}
       <div
-        className="relative bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col border border-white/10"
+        className="relative bg-gradient-to-br from-gray-900 to-gray-800 w-full h-full md:h-full overflow-hidden flex flex-col border-0 md:border md:border-white/10"
         onClick={(e) => e.stopPropagation()} // Prevent clicks from closing the modal
       >
         {/* Header with gradient background */}
@@ -589,7 +588,7 @@ export default function DetailedInfoModal({
                     Verificar coordenadas
                   </button>
                 </div>
-                <div className="h-[300px] md:h-[400px] rounded-xl overflow-hidden border border-white/10 shadow-lg">
+                <div className="h-[300px] md:h-[calc(100vh-220px)] rounded-xl overflow-hidden border border-white/10 shadow-lg">
                   <SchoolMap
                     lat={currentSchool.LAT}
                     lon={currentSchool.LON}

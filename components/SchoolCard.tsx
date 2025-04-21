@@ -14,6 +14,7 @@ import {
   MapPin,
   ExternalLink,
   ChevronRight,
+  Maximize2,
 } from "lucide-react"
 import DetailedInfoModal from "./DetailedInfoModal"
 import type { SharedPredioInfo } from "./SchoolSearch"
@@ -307,7 +308,7 @@ export default function SchoolCard({ school, sharedPredioInfo, onSearchByCUE }: 
             aria-label="Ver información detallada de la escuela"
           >
             <span className="flex items-center">
-              <Info className="w-4 h-4 mr-2" />
+              <Maximize2 className="w-4 h-4 mr-2" />
               Ver información detallada
             </span>
             <ChevronRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
