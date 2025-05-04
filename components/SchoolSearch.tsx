@@ -229,8 +229,10 @@ export default function SchoolSearch() {
             console.log(`Client: Fetching schools for PREDIO: "${normalizedPredio}"`)
 
             try {
-              // Add timestamp to URL to bypass cache
-              const url = getTimestampedUrl(`/api/schools-by-predio?predio=${encodeURIComponent(normalizedPredio)}`)
+              // Cambiar la ruta API para usar Supabase
+              const url = getTimestampedUrl(
+                `/api/schools-by-predio/supabase?predio=${encodeURIComponent(normalizedPredio)}`,
+              )
               const response = await fetch(url, {
                 cache: "no-store",
                 headers: {
@@ -441,8 +443,8 @@ export default function SchoolSearch() {
         const params = new URLSearchParams()
         if (queryToUse) params.append("query", queryToUse)
 
-        // Add timestamp to URL to bypass cache
-        const url = getTimestampedUrl(`/api/search?${params.toString()}`)
+        // Cambiar la ruta API para usar Supabase
+        const url = getTimestampedUrl(`/api/search/supabase?${params.toString()}`)
         const response = await fetch(url, {
           cache: "no-store",
           headers: {

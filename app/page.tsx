@@ -4,6 +4,8 @@ import { checkApiKeyConfigured } from "./api-key-check"
 import Footer from "@/components/Footer"
 import Image from "next/image"
 import ScrollToTopButton from "@/components/ScrollToTopButton"
+// Importar el componente MigrationButton
+import MigrationButton from "@/components/MigrationButton"
 
 export default async function Home() {
   const isApiKeyConfigured = await checkApiKeyConfigured()
@@ -51,6 +53,9 @@ export default async function Home() {
       </div>
 
       <Footer />
+
+      {/* Botón de migración a Supabase */}
+      <MigrationButton />
 
       {/* Botón para volver al inicio */}
       <ScrollToTopButton />
