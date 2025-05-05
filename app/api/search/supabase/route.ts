@@ -31,7 +31,7 @@ export async function GET(request: Request) {
         contactos (*)
       `)
 
-    // Verificar si es un patrón tipo "jardín + número" o similar
+    // Verificar si es un patrón tipo "nivel + número" (ej: "secundaria 3", "primaria 5")
     const schoolTypeNumberMatch = normalizedQuery.match(/^(\w+)\s+(\d+)$/)
 
     // Verificar si es solo un número
@@ -116,14 +116,14 @@ export async function GET(request: Request) {
     if (schoolTypeNumberMatch) {
       const [_, schoolType, schoolNumber] = schoolTypeNumberMatch
 
-      // Verificar resultados con un enfoque más relajado para detectar variaciones
+      // Verificar resultados con un enfoque más estricto para detectar variaciones
       filteredSchools = schools.filter((school) => {
         if (!school.nombre) return false
 
         const normalizedName = normalizeString(school.nombre)
         console.log(`Evaluando escuela: "${school.nombre}" (normalizado: "${normalizedName}")`)
 
-        // Verificar que contenga el tipo de escuela (jardin, escuela, etc.)
+        // Verificar que contenga el tipo de escuela (secundaria, primaria, etc.)
         let hasSchoolType = false
 
         // Para jardines, verificar múltiples variantes
@@ -142,36 +142,35 @@ export async function GET(request: Request) {
           return false
         }
 
-        // Verificar que contenga el número, con varias formas posibles
+        // Verificar que contenga el número específicamente como número de escuela
+        // y no como parte de otra información
         const numberPatterns = [
-          `${schoolNumber}`, // Número solo
-          `n ${schoolNumber}`, // n + número
-          `n° ${schoolNumber}`, // n° + número
-          `n°${schoolNumber}`, // n° pegado al número
-          `nro ${schoolNumber}`, // nro + número
-          `nro${schoolNumber}`, // nro pegado al número
-          `numero ${schoolNumber}`, // palabra "numero" + número
-          `número ${schoolNumber}`, // palabra "número" con acento + número
+          `${schoolType}\\s+(?:n|n°|nro|numero|número)?\\s*${schoolNumber}\\b`, // tipo + número
+          `\\b(?:n|n°|nro|numero|número)?\\s*${schoolNumber}\\b`, // n° + número
         ]
 
-        const hasNumber = numberPatterns.some((pattern) => normalizedName.includes(pattern))
+        // Crear expresiones regulares para cada patrón
+        const regexPatterns = numberPatterns.map((pattern) => new RegExp(pattern, "i"))
 
-        if (!hasNumber) {
-          console.log(`  - No contiene el número "${schoolNumber}" en ningún formato válido`)
+        // Verificar si alguno de los patrones coincide
+        const hasCorrectNumber = regexPatterns.some((regex) => regex.test(normalizedName))
+
+        if (!hasCorrectNumber) {
+          console.log(`  - No contiene el número "${schoolNumber}" como identificador de escuela`)
           return false
         }
 
-        console.log(`  ✓ Coincide con "${schoolType}" y "${schoolNumber}"`)
+        console.log(`  ✓ Coincide con "${schoolType}" y "${schoolNumber}" como identificador de escuela`)
         return true
       })
 
-      console.log(`API búsqueda: Filtrado adicional - Resultados: ${filteredSchools.length}`)
+      console.log(`API búsqueda: Filtrado estricto - Resultados: ${filteredSchools.length}`)
 
       // Si no encontramos resultados con el filtrado estricto, intentamos un enfoque más flexible
       if (filteredSchools.length === 0) {
         console.log("API búsqueda: Sin resultados con filtrado estricto, intentando enfoque flexible")
 
-        // Enfoque más flexible: solo verificar que contenga el número en alguna parte
+        // Enfoque más flexible: verificar que el tipo y número estén presentes, pero con criterios menos estrictos
         filteredSchools = schools.filter((school) => {
           if (!school.nombre) return false
 
@@ -180,12 +179,22 @@ export async function GET(request: Request) {
           // Para jardines, verificar que sea un jardín y contenga el número en alguna parte
           if (schoolType === "jardin" || schoolType === "jardín" || schoolType === "jardin") {
             const isJardin = normalizedName.includes("jardin") || normalizedName.includes("jardín")
-            const hasNumber = normalizedName.includes(schoolTypeNumberMatch[2])
+
+            // Verificar si el número aparece como identificador de escuela
+            const numberRegex = new RegExp(`\\b(?:n|n°|nro|numero|número)?\\s*${schoolTypeNumberMatch[2]}\\b`, "i")
+            const hasNumber = numberRegex.test(normalizedName)
 
             return isJardin && hasNumber
-          }
+          } else {
+            // Para otros tipos, verificar que contenga el tipo y el número como identificador
+            const hasType = normalizedName.includes(schoolType)
 
-          return false
+            // Verificar si el número aparece como identificador de escuela
+            const numberRegex = new RegExp(`\\b(?:n|n°|nro|numero|número)?\\s*${schoolTypeNumberMatch[2]}\\b`, "i")
+            const hasNumber = numberRegex.test(normalizedName)
+
+            return hasType && hasNumber
+          }
         })
 
         console.log(`API búsqueda: Filtrado flexible - Resultados: ${filteredSchools.length}`)
@@ -201,17 +210,8 @@ export async function GET(request: Request) {
         const normalizedName = normalizeString(school.nombre)
 
         // Verificar si el número aparece como parte de un identificador de escuela
-        const numberPatterns = [
-          `n ${searchNumber}`, // n + número
-          `n° ${searchNumber}`, // n° + número
-          `n°${searchNumber}`, // n° pegado al número
-          `nro ${searchNumber}`, // nro + número
-          `nro${searchNumber}`, // nro pegado al número
-          `numero ${searchNumber}`, // palabra "numero" + número
-          `número ${searchNumber}`, // palabra "número" con acento + número
-          ` ${searchNumber} `, // número rodeado de espacios
-          ` ${searchNumber}$`, // número al final
-        ]
+        const numberRegex = new RegExp(`\\b(?:n|n°|nro|numero|número)?\\s*${searchNumber}\\b`, "i")
+        const isSchoolNumber = numberRegex.test(normalizedName)
 
         // Si el CUE coincide exactamente, es una coincidencia perfecta
         if (school.cue.toString() === searchNumber) {
@@ -219,7 +219,7 @@ export async function GET(request: Request) {
         }
 
         // Verificar si el número aparece como identificador de escuela
-        return numberPatterns.some((pattern) => normalizedName.includes(pattern))
+        return isSchoolNumber
       })
 
       // Si no hay resultados con el filtrado estricto, devolver todos los resultados originales

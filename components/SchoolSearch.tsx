@@ -145,13 +145,12 @@ export default function SchoolSearch() {
   const checkSpecificPredios = useCallback(async () => {
     // Check for the specific PREDIO 606335 that should be shared between CUEs 60881800 and 60888400
     const specificPredio = "606335"
-    const specificCUEs = ["60881800", "60888400"]
 
     try {
-      console.log(`Client: Checking specific PREDIO ${specificPredio} for CUEs ${specificCUEs.join(", ")}`)
+      console.log(`Client: Checking specific PREDIO ${specificPredio}`)
 
       // Add timestamp to URL to bypass cache
-      const url = getTimestampedUrl(`/api/schools-by-predio?predio=${encodeURIComponent(specificPredio)}`)
+      const url = getTimestampedUrl(`/api/schools-by-predio/supabase?predio=${encodeURIComponent(specificPredio)}`)
       const response = await fetch(url, {
         cache: "no-store",
         headers: {
@@ -166,7 +165,7 @@ export default function SchoolSearch() {
       }
 
       const data = await response.json()
-      const schools = data.schools || data // Handle both response formats
+      const schools = data.schools || []
 
       console.log(`Client: Found ${schools.length} schools with specific PREDIO ${specificPredio}`)
 
@@ -229,7 +228,7 @@ export default function SchoolSearch() {
             console.log(`Client: Fetching schools for PREDIO: "${normalizedPredio}"`)
 
             try {
-              // Cambiar la URL para usar la API de Supabase
+              // Usar la API de Supabase para buscar escuelas por predio
               const url = getTimestampedUrl(
                 `/api/schools-by-predio/supabase?predio=${encodeURIComponent(normalizedPredio)}`,
               )
@@ -247,7 +246,7 @@ export default function SchoolSearch() {
               }
 
               const data = await response.json()
-              const schools = data.schools || data // Handle both response formats
+              const schools = data.schools || []
 
               console.log(
                 `Client: API returned ${Array.isArray(schools) ? schools.length : 0} schools for PREDIO ${normalizedPredio}`,
@@ -295,7 +294,7 @@ export default function SchoolSearch() {
         console.log("Client: Shared PREDIOs detected:", Object.keys(newSharedPredios).length)
         console.log("Client: Schools by PREDIO:", Object.keys(schoolsByPredio).length)
 
-        // If we didn't find any shared PREDIOs, check the specific ones we know should be shared
+        // Si no encontramos predios compartidos, verificar específicamente los que sabemos que deberían estar compartidos
         if (Object.keys(newSharedPredios).length === 0) {
           await checkSpecificPredios()
         }
