@@ -158,7 +158,7 @@ export default function DetailedInfoModal({
     }
   }
 
-  // Function to fetch school data by CUE
+  // Modificar la función fetchSchoolByCUE para usar la API de Supabase
   const fetchSchoolByCUE = async (cue: string) => {
     setLoading(true)
     setError(null)
@@ -166,7 +166,8 @@ export default function DetailedInfoModal({
     try {
       // Add timestamp to URL to bypass cache
       const timestamp = Date.now()
-      const url = `/api/search?query=${encodeURIComponent(cue)}&_t=${timestamp}`
+      // Cambiar la URL para usar la API de Supabase
+      const url = `/api/search/supabase?query=${encodeURIComponent(cue)}&_t=${timestamp}`
 
       const response = await fetch(url, {
         cache: "no-store",
@@ -209,7 +210,7 @@ export default function DetailedInfoModal({
     }
   }
 
-  // Function to fetch shared PREDIO info
+  // Modificar la función fetchSharedPredioInfo para usar la API de Supabase
   const fetchSharedPredioInfo = async (predio: string, cue: string) => {
     if (!predio) {
       setCurrentSharedPredioInfo(undefined)
@@ -219,7 +220,8 @@ export default function DetailedInfoModal({
     try {
       // Add timestamp to URL to bypass cache
       const timestamp = Date.now()
-      const url = `/api/schools-by-predio?predio=${encodeURIComponent(predio)}&_t=${timestamp}`
+      // Cambiar la URL para usar la API de Supabase
+      const url = `/api/schools-by-predio/supabase?predio=${encodeURIComponent(predio)}&_t=${timestamp}`
 
       const response = await fetch(url, {
         cache: "no-store",
@@ -593,6 +595,8 @@ export default function DetailedInfoModal({
                     lat={currentSchool.LAT}
                     lon={currentSchool.LON}
                     schoolName={currentSchool.ESTABLECIMIENTO}
+                    cue={currentSchool.CUE}
+                    showDebugger={true}
                   />
                 </div>
               </div>
@@ -692,6 +696,8 @@ export default function DetailedInfoModal({
                         lat={currentSchool.LAT}
                         lon={currentSchool.LON}
                         schoolName={currentSchool.ESTABLECIMIENTO}
+                        cue={currentSchool.CUE}
+                        showDebugger={true}
                       />
                     </div>
                   </div>

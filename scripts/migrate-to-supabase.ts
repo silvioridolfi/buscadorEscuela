@@ -1,5 +1,5 @@
 import { getSheetData } from "../lib/api-utils"
-import { supabaseAdmin, type Establecimiento, type Contacto } from "../lib/supabase"
+import { supabaseAdmin, type Establecimiento, type Contacto, generateUUID } from "../lib/supabase"
 
 /**
  * Script para migrar datos desde las hojas de cálculo a Supabase
@@ -23,90 +23,102 @@ async function migrateDataToSupabase() {
 
     // 2. Transformar los datos al formato de Supabase
     console.log("Transformando datos al formato de Supabase...")
-    const establecimientos: Establecimiento[] = establishmentsData.map((school) => ({
-      cue: school.CUE,
-      predio: school.PREDIO,
-      establecimiento: school.ESTABLECIMIENTO,
-      fed_a_cargo: school["FED A CARGO"],
-      distrito: school.DISTRITO,
-      ciudad: school.CIUDAD,
-      direccion: school["DIRECCIÓN"],
-      plan_enlace: school["PLAN ENLACE"],
-      subplan_enlace: school["SUBPLAN ENLACE"],
-      fecha_inicio_conectividad: school["FECHA INICIO CONECTIVIDAD"],
-      proveedor_internet_pnce: school["Proveedor INTERNET PNCE"],
-      fecha_instalacion_pnce: school["Fecha Instalación PNCE"],
-      pnce_tipo_mejora: school["PNCE Tipo de mejora"],
-      pnce_fecha_mejora: school["PNCE Fecha de mejora"],
-      pnce_estado: school["PNCE Estado"],
-      pba_grupo_1_proveedor_internet: school["PBA - GRUPO 1 Proveedor INTERNET"],
-      pba_grupo_1_fecha_instalacion: school["PBA - GRUPO 1 Fecha instalación"],
-      pba_grupo_1_estado: school["PBA - GRUPO 1 Estado"],
-      pba_2019_proveedor_internet: school["PBA 2019 Proveedor INTERNET"],
-      pba_2019_fecha_instalacion: school["PBA 2019 Fecha instalación"],
-      pba_2019_estado: school["PBA 2019 Estado"],
-      pba_grupo_2_a_proveedor_internet: school["PBA - GRUPO 2 - A Proveedor INTERNET"],
-      pba_grupo_2_a_fecha_instalacion: school["PBA - GRUPO 2 - A Fecha instalación"],
-      pba_grupo_2_a_tipo_mejora: school["PBA - GRUPO 2 - A Tipo de mejora"],
-      pba_grupo_2_a_fecha_mejora: school["PBA - GRUPO 2 - A Fecha de mejora"],
-      pba_grupo_2_a_estado: school["PBA - GRUPO 2 - A Estado"],
-      plan_piso_tecnologico: school["PLAN PISO TECNOLÓGICO"],
-      proveedor_piso_tecnologico_cue: school["Proveedor PISO TECNOLÓGICO CUE"],
-      fecha_terminado_piso_tecnologico_cue: school["Fecha terminado PISO TECNOLÓGICO CUE"],
-      tipo_mejora: school["Tipo de mejora"],
-      fecha_mejora: school["Fecha de mejora"],
-      tipo_piso_instalado: school["Tipo de Piso instalado"],
-      tipo: school["Tipo"],
-      observaciones: school["Observaciones"],
-      tipo_establecimiento: school["Tipo de establecimiento"],
-      listado_conexion_internet: school["Listado por el que se conecta internet"],
-      estado_instalacion_pba: school["Estado de instalacion PBA"],
-      proveedor_asignado_pba: school["Proveedor asignado PBA"],
-      mb: school["MB"],
-      ambito: school["Ambito"],
-      cue_anterior: school["CUE ANTERIOR"],
-      reclamos_grupo_1_ani: school["RECLAMOS GRUPO 1 ANI"],
-      recurso_primario: school["RECURSO PRIMARIO"],
-      access_id: school["Access ID"],
-      lat: school["Lat"],
-      lon: school["Lon"],
-    }))
+    const establecimientos: Establecimiento[] = establishmentsData.map((school) => {
+      // Convertir CUE a número (bigint)
+      const cue = Number.parseInt(school.CUE, 10)
+      if (isNaN(cue)) {
+        console.warn(`CUE inválido: ${school.CUE}, usando 0 como valor predeterminado`)
+      }
 
-    const contactos: Contacto[] = contactsData.map((contact) => ({
-      cue: contact.CUE,
-      nombre: contact["NOMBRE"],
-      apellido: contact["APELLIDO"],
-      cargo: contact["CARGO"],
-      telefono: contact["TELÉFONO"],
-      correo_institucional: contact["CORREO INSTITUCIONAL"],
-    }))
+      // Convertir coordenadas a números
+      let lat: number | undefined = undefined
+      let lon: number | undefined = undefined
+
+      if (school.Lat && school.Lon) {
+        const parsedLat = Number.parseFloat(school.Lat)
+        const parsedLon = Number.parseFloat(school.Lon)
+
+        if (!isNaN(parsedLat) && !isNaN(parsedLon)) {
+          lat = parsedLat
+          lon = parsedLon
+        }
+      }
+
+      // Crear objeto según la estructura real de la tabla
+      return {
+        id: generateUUID(), // Generar un UUID para cada establecimiento
+        cue: isNaN(cue) ? 0 : cue,
+        nombre: school.ESTABLECIMIENTO,
+        distrito: school.DISTRITO,
+        ciudad: school.CIUDAD,
+        direccion: school["DIRECCIÓN"],
+        lat,
+        lon,
+        // No incluimos fed_id e info_tecnica_id ya que no tenemos esos datos
+      }
+    })
+
+    const contactos: Contacto[] = contactsData.map((contact) => {
+      // Convertir CUE a número (bigint)
+      const cue = Number.parseInt(contact.CUE, 10)
+      if (isNaN(cue)) {
+        console.warn(`CUE inválido en contacto: ${contact.CUE}, usando 0 como valor predeterminado`)
+      }
+
+      return {
+        id: generateUUID(), // Generar un UUID para cada contacto
+        cue: isNaN(cue) ? 0 : cue,
+        nombre: contact["NOMBRE"],
+        apellido: contact["APELLIDO"],
+        correo: contact["CORREO INSTITUCIONAL"],
+        telefono: contact["TELÉFONO"],
+      }
+    })
 
     // 3. Insertar datos en Supabase
     console.log("Insertando datos en Supabase...")
 
     // Insertar establecimientos
     console.log("Insertando establecimientos...")
-    for (let i = 0; i < establecimientos.length; i += 100) {
-      const batch = establecimientos.slice(i, i + 100)
-      const { error } = await supabaseAdmin.from("establecimientos").upsert(batch, { onConflict: "cue" })
+    for (let i = 0; i < establecimientos.length; i += 25) {
+      const batch = establecimientos.slice(i, i + 25)
+      try {
+        const { error } = await supabaseAdmin.from("establecimientos").upsert(batch, {
+          onConflict: "cue",
+          ignoreDuplicates: false,
+        })
 
-      if (error) {
-        console.error(`Error al insertar lote de establecimientos ${i}-${i + 100}:`, error)
-      } else {
-        console.log(`Insertados establecimientos ${i}-${i + batch.length}`)
+        if (error) {
+          console.error(`Error al insertar lote de establecimientos ${i}-${i + batch.length}:`, error)
+        } else {
+          console.log(`Insertados establecimientos ${i}-${i + batch.length}`)
+        }
+      } catch (error) {
+        console.error(`Error al insertar lote de establecimientos ${i}-${i + batch.length}:`, error)
       }
     }
 
-    // Insertar contactos
+    // Insertar contactos - Modificado para no usar onConflict con cue
     console.log("Insertando contactos...")
-    for (let i = 0; i < contactos.length; i += 100) {
-      const batch = contactos.slice(i, i + 100)
-      const { error } = await supabaseAdmin.from("contactos").upsert(batch, { onConflict: "cue" })
+    for (let i = 0; i < contactos.length; i += 25) {
+      const batch = contactos.slice(i, i + 25)
+      try {
+        // Primero, intentamos eliminar contactos existentes con los mismos CUEs para evitar duplicados
+        const cues = batch.map((contact) => contact.cue).filter(Boolean)
+        if (cues.length > 0) {
+          await supabaseAdmin.from("contactos").delete().in("cue", cues)
+        }
 
-      if (error) {
-        console.error(`Error al insertar lote de contactos ${i}-${i + 100}:`, error)
-      } else {
-        console.log(`Insertados contactos ${i}-${i + batch.length}`)
+        // Luego insertamos los nuevos contactos
+        const { error } = await supabaseAdmin.from("contactos").insert(batch)
+
+        if (error) {
+          console.error(`Error al insertar lote de contactos ${i}-${i + batch.length}:`, error)
+        } else {
+          console.log(`Insertados contactos ${i}-${i + batch.length}`)
+        }
+      } catch (error) {
+        console.error(`Error al insertar lote de contactos ${i}-${i + batch.length}:`, error)
       }
     }
 

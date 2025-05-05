@@ -26,8 +26,8 @@ export async function GET(request: Request) {
     // Obtener nombres de establecimientos que coincidan
     const { data: schoolsData, error: schoolsError } = await supabaseAdmin
       .from("establecimientos")
-      .select("establecimiento")
-      .ilike("establecimiento", `%${normalizedQuery}%`)
+      .select("nombre")
+      .ilike("nombre", `%${normalizedQuery}%`)
       .limit(5)
 
     if (schoolsError) throw schoolsError
@@ -42,7 +42,7 @@ export async function GET(request: Request) {
     if (districtsError) throw districtsError
 
     // Extraer nombres de establecimientos
-    const matchingSchools = schoolsData.map((school) => school.establecimiento)
+    const matchingSchools = schoolsData.filter((school) => school.nombre).map((school) => school.nombre)
 
     // Extraer y formatear distritos únicos
     const districts = [...new Set(districtsData.map((item) => item.distrito).filter(Boolean))]

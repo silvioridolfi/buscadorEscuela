@@ -229,7 +229,7 @@ export default function SchoolSearch() {
             console.log(`Client: Fetching schools for PREDIO: "${normalizedPredio}"`)
 
             try {
-              // Cambiar la ruta API para usar Supabase
+              // Cambiar la URL para usar la API de Supabase
               const url = getTimestampedUrl(
                 `/api/schools-by-predio/supabase?predio=${encodeURIComponent(normalizedPredio)}`,
               )
@@ -340,7 +340,8 @@ export default function SchoolSearch() {
     try {
       console.log("Client: Fetching all schools to check for shared PREDIOs")
 
-      // Add timestamp to URL to bypass cache
+      // Cambiar la URL para usar la API de Supabase (si existe)
+      // Si no existe una API específica para esto en Supabase, podemos mantener la original
       const url = getTimestampedUrl("/api/all-schools")
       const response = await fetch(url, {
         cache: "no-store",
@@ -443,7 +444,7 @@ export default function SchoolSearch() {
         const params = new URLSearchParams()
         if (queryToUse) params.append("query", queryToUse)
 
-        // Cambiar la ruta API para usar Supabase
+        // Cambiar la URL para usar la API de Supabase
         const url = getTimestampedUrl(`/api/search/supabase?${params.toString()}`)
         const response = await fetch(url, {
           cache: "no-store",
@@ -577,18 +578,6 @@ export default function SchoolSearch() {
                 </div>
               </div>
             </div>
-          )}
-
-          {/* Botón de limpiar */}
-          {(query || results.length > 0) && (
-            <button
-              type="button"
-              onClick={handleClear}
-              className="text-white/70 hover:text-white text-sm flex items-center mx-auto"
-            >
-              <X className="w-3 h-3 mr-1" />
-              Limpiar búsqueda
-            </button>
           )}
         </div>
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getSheetData } from "@/lib/api-utils"
 import { supabaseAdmin, type Establecimiento, type Contacto, generateUUID } from "@/lib/supabase"
+import { verifyAdminAuth } from "@/lib/auth-utils"
 
 // Esta ruta API permite ejecutar la migración de datos manualmente
 export async function POST(request: Request) {
@@ -9,7 +10,8 @@ export async function POST(request: Request) {
     const { searchParams } = new URL(request.url)
     const authKey = searchParams.get("key")
 
-    if (!authKey || authKey !== process.env.MIGRATION_AUTH_KEY) {
+    // Verificar la autenticación usando el nuevo sistema
+    if (!verifyAdminAuth(authKey)) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 

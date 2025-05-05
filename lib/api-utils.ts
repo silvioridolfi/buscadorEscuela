@@ -255,6 +255,7 @@ export function normalizeString(str: string | null | undefined): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // Remove accents
+    .trim() // Asegurarse de eliminar espacios al inicio y final
 }
 
 /**
