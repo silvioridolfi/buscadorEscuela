@@ -3,7 +3,6 @@ import {
   X,
   AlertTriangle,
   MapPin,
-  Bug,
   School,
   Building,
   Hash,
@@ -454,14 +453,6 @@ export default function DetailedInfoModal({
   // Filter out empty values from technical info
   const filteredTechnicalInfo = technicalInfo.filter((item) => item.value)
 
-  // Function to check coordinates in debug mode
-  const checkCoordinates = () => {
-    window.open(
-      `/api/debug/coordinates?lat=${encodeURIComponent(currentSchool.LAT)}&lon=${encodeURIComponent(currentSchool.LON)}`,
-      "_blank",
-    )
-  }
-
   // Solo renderizar el portal si estamos en el cliente y el componente está montado
   if (typeof window === "undefined" || !mounted) return null
 
@@ -577,19 +568,10 @@ export default function DetailedInfoModal({
           {activeTab === "map" && hasLocation ? (
             <div className="p-5 md:p-6">
               <div className="mb-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-                    <MapPin className="w-5 h-5 text-primary" />
-                    Ubicación
-                  </h3>
-                  <button
-                    onClick={checkCoordinates}
-                    className="text-xs bg-gray-700 px-3 py-1 rounded-full text-white/70 flex items-center hover:bg-gray-600"
-                  >
-                    <Bug className="w-3 h-3 mr-1" />
-                    Verificar coordenadas
-                  </button>
-                </div>
+                <h3 className="text-lg md:text-xl font-bold text-white flex items-center gap-2 mb-4">
+                  <MapPin className="w-5 h-5 text-primary" />
+                  Ubicación
+                </h3>
                 <div className="h-[300px] md:h-[calc(100vh-220px)] rounded-xl overflow-hidden border border-white/10 shadow-lg">
                   <SchoolMap
                     lat={currentSchool.LAT}

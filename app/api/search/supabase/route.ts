@@ -19,79 +19,78 @@ export async function GET(request: Request) {
   }
 
   try {
+    console.log(`API búsqueda: Consulta original: "${query}"`)
+
+    // Normalizar la consulta (quitar acentos, convertir a minúsculas)
+    const normalizedQuery = normalizeString(query)
+    console.log(`API búsqueda: Consulta normalizada: "${normalizedQuery}"`)
+
     // Construir la consulta base
     let supabaseQuery = supabaseAdmin.from("establecimientos").select(`
         *,
         contactos (*)
       `)
 
-    // Aplicar filtros
-    if (query) {
-      // Verificar si es una búsqueda por CUE exacto
-      if (/^\d+$/.test(query)) {
-        const cueNumber = Number.parseInt(query, 10)
-        if (!isNaN(cueNumber)) {
-          supabaseQuery = supabaseQuery.eq("cue", cueNumber)
-        }
+    // Verificar si es un patrón tipo "jardín + número" o similar
+    const schoolTypeNumberMatch = normalizedQuery.match(/^(\w+)\s+(\d+)$/)
+
+    // Verificar si es solo un número
+    const isOnlyNumber = /^\d+$/.test(query)
+
+    if (schoolTypeNumberMatch) {
+      // Extraer el tipo de escuela y el número
+      const [_, schoolType, schoolNumber] = schoolTypeNumberMatch
+      console.log(`API búsqueda: Detectado patrón - Tipo: "${schoolType}", Número: "${schoolNumber}"`)
+
+      // Manejar específicamente el caso de "jardin" o "jardín"
+      if (schoolType === "jardin" || schoolType === "jardín" || schoolType === "jardin") {
+        // Para jardines, usamos una estrategia específica
+        // Buscamos cualquier variante de "jardin" (con o sin acento) y el número específico
+        const jardinVariants = ["jardin", "jardín", "jardin de infantes", "jardín de infantes"]
+
+        // Construir condiciones OR para cada variante
+        const jardinConditions = jardinVariants.map((variant) => `nombre.ilike.%${variant}%`).join(",")
+
+        // Primero filtramos por alguna variante de jardín
+        supabaseQuery = supabaseQuery.or(jardinConditions)
+
+        // Y luego aseguramos que contenga el número
+        supabaseQuery = supabaseQuery.ilike("nombre", `%${schoolNumber}%`)
+
+        console.log(`API búsqueda: Aplicando búsqueda específica para jardín ${schoolNumber}`)
       } else {
-        // Búsqueda por texto en el nombre del establecimiento
-        const normalizedQuery = normalizeString(query)
-
-        // Verificar si la consulta parece ser "secundaria X" o similar
-        const schoolTypeNumberMatch = normalizedQuery.match(/^(\w+)\s+(\d+)$/)
-
-        if (schoolTypeNumberMatch) {
-          // Si es un patrón como "secundaria 2", buscar de forma más específica
-          const [, schoolType, schoolNumber] = schoolTypeNumberMatch
-
-          // Construir patrones para buscar el número exacto
-          // Estos patrones buscarán coincidencias como:
-          // - "primaria n° 2"
-          // - "primaria nro 2"
-          // - "primaria numero 2"
-          // - "primaria n 2"
-          // - "primaria 2"
-          // Y evitarán coincidencias como "primaria 12", "primaria 21", etc.
-
-          // Primero, asegurarse de que contiene el tipo de escuela
-          supabaseQuery = supabaseQuery.ilike("nombre", `%${schoolType}%`)
-
-          // Luego, buscar patrones específicos para el número exacto
-          supabaseQuery = supabaseQuery.or(
-            `nombre.ilike.%n° ${schoolNumber} %,` +
-              `nombre.ilike.%n° ${schoolNumber}$,` +
-              `nombre.ilike.%n°${schoolNumber} %,` +
-              `nombre.ilike.%n°${schoolNumber}$,` +
-              `nombre.ilike.%nro ${schoolNumber} %,` +
-              `nombre.ilike.%nro ${schoolNumber}$,` +
-              `nombre.ilike.%nro${schoolNumber} %,` +
-              `nombre.ilike.%nro${schoolNumber}$,` +
-              `nombre.ilike.%numero ${schoolNumber} %,` +
-              `nombre.ilike.%numero ${schoolNumber}$,` +
-              `nombre.ilike.%n ${schoolNumber} %,` +
-              `nombre.ilike.%n ${schoolNumber}$,` +
-              `nombre.ilike.% ${schoolNumber} %,` +
-              `nombre.ilike.% ${schoolNumber}$`,
-          )
-        } else {
-          // Búsqueda general por nombre
-          supabaseQuery = supabaseQuery.ilike("nombre", `%${normalizedQuery}%`)
-        }
+        // Para otros tipos de escuela, usamos la estrategia general
+        // Buscamos escuelas que contengan tanto el tipo como el número
+        supabaseQuery = supabaseQuery.ilike("nombre", `%${schoolType}%`).ilike("nombre", `%${schoolNumber}%`)
+        console.log(`API búsqueda: Aplicando búsqueda combinada para "${schoolType}" y "${schoolNumber}"`)
       }
+    } else if (isOnlyNumber) {
+      // Si es solo un número (como CUE o número de escuela)
+      const cueNumber = Number.parseInt(query, 10)
+      if (!isNaN(cueNumber)) {
+        // Buscar por CUE exacto o por el número en el nombre
+        supabaseQuery = supabaseQuery.or(`cue.eq.${cueNumber},nombre.ilike.%${query}%`)
+        console.log(`API búsqueda: Buscando por CUE/número: ${cueNumber}`)
+      }
+    } else {
+      // Búsqueda general por texto
+      supabaseQuery = supabaseQuery.ilike("nombre", `%${normalizedQuery}%`)
+      console.log(`API búsqueda: Buscando texto general: "${normalizedQuery}"`)
     }
 
+    // Aplicar filtros adicionales
     if (district) {
       supabaseQuery = supabaseQuery.ilike("distrito", `%${district}%`)
     }
 
     if (level) {
-      // Filtrar por nivel educativo (primaria, secundaria, etc.)
+      // Filtrar por nivel educativo
       if (level === "primaria") {
         supabaseQuery = supabaseQuery.ilike("nombre", "%primaria%")
       } else if (level === "secundaria") {
         supabaseQuery = supabaseQuery.ilike("nombre", "%secundaria%")
       } else if (level === "inicial") {
-        supabaseQuery = supabaseQuery.or("nombre.ilike.%inicial%,nombre.ilike.%jardin%")
+        supabaseQuery = supabaseQuery.or("nombre.ilike.%inicial%,nombre.ilike.%jardin%,nombre.ilike.%jardín%")
       } else if (level === "tecnica") {
         supabaseQuery = supabaseQuery.ilike("nombre", "%tecnica%")
       } else if (level === "especial") {
@@ -108,31 +107,127 @@ export async function GET(request: Request) {
       throw error
     }
 
-    // Filtrado adicional para búsquedas de tipo "primaria X"
+    console.log(`API búsqueda: Recuperadas ${schools?.length || 0} escuelas.`)
+
+    // Filtrado adicional para términos compuestos
     let filteredSchools = schools
 
-    const schoolTypeNumberMatch = normalizeString(query).match(/^(\w+)\s+(\d+)$/)
+    // En caso de búsqueda tipo+número, hacer un segundo filtrado para resultados más precisos
     if (schoolTypeNumberMatch) {
-      const [, , schoolNumber] = schoolTypeNumberMatch
+      const [_, schoolType, schoolNumber] = schoolTypeNumberMatch
 
-      // Filtrar los resultados para asegurarnos de que solo incluimos escuelas con el número exacto
+      // Verificar resultados con un enfoque más relajado para detectar variaciones
       filteredSchools = schools.filter((school) => {
-        const normalizedName = normalizeString(school.nombre || "")
+        if (!school.nombre) return false
 
-        // Patrones para detectar el número exacto de la escuela
-        const exactNumberPatterns = [
-          new RegExp(`n° ${schoolNumber}\\b`),
-          new RegExp(`n°${schoolNumber}\\b`),
-          new RegExp(`nro ${schoolNumber}\\b`),
-          new RegExp(`nro${schoolNumber}\\b`),
-          new RegExp(`numero ${schoolNumber}\\b`),
-          new RegExp(`n ${schoolNumber}\\b`),
-          new RegExp(`\\b${schoolNumber}\\b`), // Número solo, pero como palabra completa
+        const normalizedName = normalizeString(school.nombre)
+        console.log(`Evaluando escuela: "${school.nombre}" (normalizado: "${normalizedName}")`)
+
+        // Verificar que contenga el tipo de escuela (jardin, escuela, etc.)
+        let hasSchoolType = false
+
+        // Para jardines, verificar múltiples variantes
+        if (schoolType === "jardin" || schoolType === "jardín" || schoolType === "jardin") {
+          hasSchoolType =
+            normalizedName.includes("jardin") ||
+            normalizedName.includes("jardín") ||
+            normalizedName.includes("jardin de infantes") ||
+            normalizedName.includes("jardín de infantes")
+        } else {
+          hasSchoolType = normalizedName.includes(schoolType)
+        }
+
+        if (!hasSchoolType) {
+          console.log(`  - No contiene el tipo "${schoolType}"`)
+          return false
+        }
+
+        // Verificar que contenga el número, con varias formas posibles
+        const numberPatterns = [
+          `${schoolNumber}`, // Número solo
+          `n ${schoolNumber}`, // n + número
+          `n° ${schoolNumber}`, // n° + número
+          `n°${schoolNumber}`, // n° pegado al número
+          `nro ${schoolNumber}`, // nro + número
+          `nro${schoolNumber}`, // nro pegado al número
+          `numero ${schoolNumber}`, // palabra "numero" + número
+          `número ${schoolNumber}`, // palabra "número" con acento + número
         ]
 
-        // Verificar si alguno de los patrones coincide
-        return exactNumberPatterns.some((pattern) => pattern.test(normalizedName))
+        const hasNumber = numberPatterns.some((pattern) => normalizedName.includes(pattern))
+
+        if (!hasNumber) {
+          console.log(`  - No contiene el número "${schoolNumber}" en ningún formato válido`)
+          return false
+        }
+
+        console.log(`  ✓ Coincide con "${schoolType}" y "${schoolNumber}"`)
+        return true
       })
+
+      console.log(`API búsqueda: Filtrado adicional - Resultados: ${filteredSchools.length}`)
+
+      // Si no encontramos resultados con el filtrado estricto, intentamos un enfoque más flexible
+      if (filteredSchools.length === 0) {
+        console.log("API búsqueda: Sin resultados con filtrado estricto, intentando enfoque flexible")
+
+        // Enfoque más flexible: solo verificar que contenga el número en alguna parte
+        filteredSchools = schools.filter((school) => {
+          if (!school.nombre) return false
+
+          const normalizedName = normalizeString(school.nombre)
+
+          // Para jardines, verificar que sea un jardín y contenga el número en alguna parte
+          if (schoolType === "jardin" || schoolType === "jardín" || schoolType === "jardin") {
+            const isJardin = normalizedName.includes("jardin") || normalizedName.includes("jardín")
+            const hasNumber = normalizedName.includes(schoolTypeNumberMatch[2])
+
+            return isJardin && hasNumber
+          }
+
+          return false
+        })
+
+        console.log(`API búsqueda: Filtrado flexible - Resultados: ${filteredSchools.length}`)
+      }
+    } else if (isOnlyNumber) {
+      // Para búsquedas de solo números, mejorar la relevancia
+      const searchNumber = query
+
+      // Filtrar para priorizar escuelas donde el número es parte del identificador principal
+      filteredSchools = schools.filter((school) => {
+        if (!school.nombre) return false
+
+        const normalizedName = normalizeString(school.nombre)
+
+        // Verificar si el número aparece como parte de un identificador de escuela
+        const numberPatterns = [
+          `n ${searchNumber}`, // n + número
+          `n° ${searchNumber}`, // n° + número
+          `n°${searchNumber}`, // n° pegado al número
+          `nro ${searchNumber}`, // nro + número
+          `nro${searchNumber}`, // nro pegado al número
+          `numero ${searchNumber}`, // palabra "numero" + número
+          `número ${searchNumber}`, // palabra "número" con acento + número
+          ` ${searchNumber} `, // número rodeado de espacios
+          ` ${searchNumber}$`, // número al final
+        ]
+
+        // Si el CUE coincide exactamente, es una coincidencia perfecta
+        if (school.cue.toString() === searchNumber) {
+          return true
+        }
+
+        // Verificar si el número aparece como identificador de escuela
+        return numberPatterns.some((pattern) => normalizedName.includes(pattern))
+      })
+
+      // Si no hay resultados con el filtrado estricto, devolver todos los resultados originales
+      if (filteredSchools.length === 0) {
+        filteredSchools = schools
+      }
+
+      console.log(`API búsqueda: Filtrado para número ${searchNumber} - Resultados: ${filteredSchools.length}`)
     }
 
     // Transformar los resultados al formato esperado por el frontend
