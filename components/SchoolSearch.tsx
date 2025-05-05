@@ -6,7 +6,7 @@ import SchoolCard from "./SchoolCard"
 import { Search, X, RefreshCw, School, AlertCircle, Loader2 } from "lucide-react"
 
 // Add a version number to help track deployments
-const APP_VERSION = "2.0.1" // Optimización y limpieza de código
+const APP_VERSION = "2.0.3" // Optimización y corrección de funcionalidades
 // Generar versión automática basada en la fecha (formato: AAAA.MM.DD)
 const today = new Date()
 const AUTO_VERSION = `${today.getFullYear()}.${(today.getMonth() + 1).toString().padStart(2, "0")}.${today.getDate().toString().padStart(2, "0")}`
@@ -490,6 +490,7 @@ export default function SchoolSearch() {
     fetchResults()
   }
 
+  // Mejorar la función handleClear para limpiar la búsqueda y los resultados
   const handleClear = () => {
     setQuery("")
     setResults([])
@@ -505,6 +506,11 @@ export default function SchoolSearch() {
         console.log("Search input focused after clear")
       }
     }, 50)
+  }
+
+  // Función para manejar el clic en el botón X
+  const handleClearButtonClick = () => {
+    handleClear()
   }
 
   return (
@@ -531,8 +537,9 @@ export default function SchoolSearch() {
                 {query && (
                   <button
                     type="button"
-                    onClick={() => setQuery("")}
+                    onClick={handleClearButtonClick}
                     className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-1 rounded-full transition-colors"
+                    aria-label="Limpiar búsqueda"
                   >
                     <X className="w-4 h-4" />
                   </button>

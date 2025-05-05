@@ -2,22 +2,19 @@
 
 import { useEffect, useState } from "react"
 import { MapPin, AlertTriangle, ExternalLink } from "lucide-react"
-import CoordinateDebugger from "./CoordinateDebugger"
 
 interface SchoolMapProps {
   lat: string
   lon: string
   schoolName: string
   cue: string
-  showDebugger?: boolean
 }
 
-export default function SchoolMap({ lat, lon, schoolName, cue, showDebugger = false }: SchoolMapProps) {
+export default function SchoolMap({ lat, lon, schoolName, cue }: SchoolMapProps) {
   const [mapUrl, setMapUrl] = useState<string | null>(null)
   const [directUrl, setDirectUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [debugMode, setDebugMode] = useState(showDebugger)
 
   useEffect(() => {
     async function fetchMapData() {
@@ -42,23 +39,9 @@ export default function SchoolMap({ lat, lon, schoolName, cue, showDebugger = fa
           throw new Error("Coordenadas inválidas")
         }
 
-        // Verificar si son coordenadas enteras y ajustarlas si es necesario
-        // Esto es una solución temporal para el problema de coordenadas enteras
-        let adjustedLat = latNum
-        let adjustedLon = lonNum
-
-        // Si las coordenadas son enteras, asumimos que son aproximadas y las ajustamos
-        // para Buenos Aires, Argentina
-        if (Number.isInteger(latNum) && latNum === -34) {
-          adjustedLat = -34.6037 // Coordenada aproximada para Buenos Aires
-        }
-        if (Number.isInteger(lonNum) && lonNum === -58) {
-          adjustedLon = -58.3816 // Coordenada aproximada para Buenos Aires
-        }
-
         // Obtener la URL del mapa desde el servidor
         const response = await fetch(
-          `/api/maps/embed-url?lat=${adjustedLat}&lon=${adjustedLon}&name=${encodeURIComponent(schoolName)}`,
+          `/api/maps/embed-url?lat=${latNum}&lon=${lonNum}&name=${encodeURIComponent(schoolName)}`,
           {
             cache: "no-store",
           },
@@ -72,12 +55,6 @@ export default function SchoolMap({ lat, lon, schoolName, cue, showDebugger = fa
         setMapUrl(data.mapUrl)
         setDirectUrl(data.directUrl)
         setLoading(false)
-
-        // Log para depuración
-        console.log(`Mapa cargado para ${schoolName} (CUE: ${cue}) en coordenadas: ${adjustedLat}, ${adjustedLon}`)
-        if (adjustedLat !== latNum || adjustedLon !== lonNum) {
-          console.log(`Nota: Coordenadas ajustadas de ${latNum},${lonNum} a ${adjustedLat},${adjustedLon}`)
-        }
       } catch (err) {
         console.error("Error fetching map:", err)
         setError(err instanceof Error ? err.message : "Error al cargar el mapa")
@@ -100,8 +77,6 @@ export default function SchoolMap({ lat, lon, schoolName, cue, showDebugger = fa
 
   return (
     <div className="w-full h-full flex flex-col">
-      {debugMode && <CoordinateDebugger cue={cue} lat={lat} lon={lon} schoolName={schoolName} />}
-
       {error || !mapUrl ? (
         <div className="w-full h-full bg-gray-800/50 rounded-lg flex flex-col items-center justify-center p-4 text-center">
           <AlertTriangle className="w-8 h-8 text-amber-500 mb-2" />
@@ -117,15 +92,6 @@ export default function SchoolMap({ lat, lon, schoolName, cue, showDebugger = fa
               Ver en Google Maps
             </a>
           )}
-          <p className="text-xs text-white/40 mt-2">
-            Coordenadas: {lat}, {lon}
-          </p>
-          <button
-            onClick={() => setDebugMode(!debugMode)}
-            className="mt-3 text-xs bg-gray-700 hover:bg-gray-600 text-white/70 px-2 py-1 rounded-md"
-          >
-            {debugMode ? "Ocultar depurador" : "Mostrar depurador"}
-          </button>
         </div>
       ) : (
         <div className="w-full h-full flex flex-col">
@@ -141,7 +107,7 @@ export default function SchoolMap({ lat, lon, schoolName, cue, showDebugger = fa
               title={`Mapa de ${schoolName}`}
             ></iframe>
 
-            <div className="absolute bottom-2 right-2 flex gap-2">
+            <div className="absolute bottom-2 right-2">
               <a
                 href={directUrl}
                 target="_blank"
@@ -151,13 +117,6 @@ export default function SchoolMap({ lat, lon, schoolName, cue, showDebugger = fa
                 <ExternalLink className="w-3 h-3 mr-1" />
                 Abrir en Google Maps
               </a>
-
-              <button
-                onClick={() => setDebugMode(!debugMode)}
-                className="bg-white/90 hover:bg-white text-gray-800 text-xs px-2 py-1 rounded-md flex items-center shadow-md"
-              >
-                {debugMode ? "Ocultar depurador" : "Mostrar depurador"}
-              </button>
             </div>
           </div>
         </div>

@@ -207,13 +207,13 @@ export default function SchoolCard({ school, sharedPredioInfo, onSearchByCUE }: 
 
         {/* Main Info Block */}
         <div className="px-5 pb-4 flex-grow">
-          {/* FED a cargo */}
+          {/* FED a cargo - Asegurarse de que se muestre correctamente */}
           {school.FED_A_CARGO && (
             <div className="mb-3 bg-white/10 p-3 rounded-xl flex items-center border border-white/10 shadow-sm">
               <User className="w-4 h-4 text-white/80 mr-2 flex-shrink-0" />
-              <div>
+              <div className="flex-1 min-w-0">
                 <span className="text-sm font-bold text-white/90">FED a cargo:</span>
-                <span className="ml-1.5 text-sm font-bold text-white/80">{school.FED_A_CARGO}</span>
+                <span className="ml-1.5 text-sm font-bold text-white/80 break-words">{school.FED_A_CARGO}</span>
               </div>
             </div>
           )}
@@ -223,9 +223,9 @@ export default function SchoolCard({ school, sharedPredioInfo, onSearchByCUE }: 
             {school.CIUDAD && (
               <div className="flex items-center p-3 bg-white/10 rounded-xl border border-white/10 shadow-sm">
                 <MapIcon className="w-4 h-4 text-white/80 mr-2 flex-shrink-0" />
-                <div>
+                <div className="flex-1 min-w-0">
                   <span className="text-sm font-bold text-white/90">Ciudad:</span>
-                  <span className="ml-1.5 text-sm text-white/80">{school.CIUDAD}</span>
+                  <span className="ml-1.5 text-sm text-white/80 break-words">{school.CIUDAD}</span>
                 </div>
               </div>
             )}
@@ -233,9 +233,9 @@ export default function SchoolCard({ school, sharedPredioInfo, onSearchByCUE }: 
             {school.DIRECCION && (
               <div className="flex items-start p-3 bg-white/10 rounded-xl border border-white/10 shadow-sm">
                 <MapPin className="w-4 h-4 text-white/80 mr-2 mt-0.5 flex-shrink-0" />
-                <div>
+                <div className="flex-1 min-w-0">
                   <span className="text-sm font-bold text-white/90">Dirección:</span>
-                  <span className="ml-1.5 text-sm text-white/80">{school.DIRECCION}</span>
+                  <span className="ml-1.5 text-sm text-white/80 break-words">{school.DIRECCION}</span>
                 </div>
               </div>
             )}
@@ -247,9 +247,9 @@ export default function SchoolCard({ school, sharedPredioInfo, onSearchByCUE }: 
               {(school.NOMBRE || school.APELLIDO) && (
                 <div className="flex items-center p-3 bg-white/10 rounded-xl border border-white/10 shadow-sm mt-2.5">
                   <User className="w-4 h-4 text-white/80 mr-2 flex-shrink-0" />
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <span className="text-sm font-bold text-white/90">{formatCargoTitle(school.CARGO)}:</span>
-                    <span className="ml-1.5 text-sm text-white/80">
+                    <span className="ml-1.5 text-sm text-white/80 break-words">
                       {school.NOMBRE} {school.APELLIDO}
                     </span>
                   </div>
@@ -259,9 +259,9 @@ export default function SchoolCard({ school, sharedPredioInfo, onSearchByCUE }: 
               {school.TELEFONO && (
                 <div className="flex items-center p-3 bg-white/10 rounded-xl border border-white/10 shadow-sm">
                   <Phone className="w-4 h-4 text-white/80 mr-2 flex-shrink-0" />
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <span className="text-sm font-bold text-white/90">Teléfono:</span>
-                    <span className="ml-1.5 text-sm text-white/80">{school.TELEFONO}</span>
+                    <span className="ml-1.5 text-sm text-white/80 break-words">{school.TELEFONO}</span>
                   </div>
                 </div>
               )}
@@ -275,14 +275,16 @@ export default function SchoolCard({ school, sharedPredioInfo, onSearchByCUE }: 
             <div className="bg-amber-500/20 p-3 rounded-xl border border-amber-500/30 shadow-sm">
               <div className="flex items-start">
                 <AlertTriangle className="w-4 h-4 text-amber-400 mr-2 mt-0.5 flex-shrink-0" />
-                <div>
+                <div className="flex-1 min-w-0">
                   <div className="text-sm font-bold text-amber-200">Predio {school.PREDIO} compartido con:</div>
                   <ul className="mt-1.5 space-y-1.5 max-h-24 overflow-y-auto">
                     {sharedPredioInfo?.sharedWith.map((shared) => (
                       <li key={shared.CUE} className="text-sm text-amber-100 flex items-start">
                         <span className="text-amber-400 mr-1.5">•</span>
-                        <div>
-                          <span className="font-medium">{getAbbreviatedSchoolName(shared.ESTABLECIMIENTO)}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium break-words">
+                            {getAbbreviatedSchoolName(shared.ESTABLECIMIENTO)}
+                          </span>
                           <button
                             onClick={(e) => handleCUEClick(shared.CUE, e)}
                             className="ml-1.5 text-amber-300 hover:text-amber-100 hover:underline flex items-center text-xs"

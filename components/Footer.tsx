@@ -1,5 +1,5 @@
 // Add a version number to help track deployments
-const APP_VERSION = "2.0.2" // Actualización de formato de fecha y adición de marca
+const APP_VERSION = "2.0.4" // Correcciones de imágenes y mapas
 // Generar versión automática basada en la fecha en formato latino (DD.MM.AAAA)
 const today = new Date()
 const AUTO_VERSION = `${today.getDate().toString().padStart(2, "0")}.${(today.getMonth() + 1).toString().padStart(2, "0")}.${today.getFullYear()}`
@@ -23,7 +23,11 @@ export default function Footer() {
 
             {/* Logo para desktop */}
             <div className="hidden md:block h-[80px]">
-              <img src="/images/pba-logo.png" alt="Gobierno de la Provincia de Buenos Aires" className="h-[80px]" />
+              <img
+                src="/images/pba-logo.png"
+                alt="Gobierno de la Provincia de Buenos Aires"
+                className="h-[80px] w-auto object-contain"
+              />
             </div>
           </div>
 

@@ -2,10 +2,7 @@ import SchoolSearch from "@/components/SchoolSearch"
 import SetupInstructions from "./setup-instructions"
 import { checkApiKeyConfigured } from "./api-key-check"
 import Footer from "@/components/Footer"
-import Image from "next/image"
 import ScrollToTopButton from "@/components/ScrollToTopButton"
-// Eliminar esta línea
-// import MigrationButton from "@/components/MigrationButton"
 
 export default async function Home() {
   const isApiKeyConfigured = await checkApiKeyConfigured()
@@ -25,13 +22,10 @@ export default async function Home() {
 
               {/* Usando la imagen proporcionada con mejor visibilidad */}
               <div className="relative w-24 h-24 flex items-center justify-center z-10">
-                <Image
+                <img
                   src="/mi_escuela_1.png"
                   alt="Icono de escuela"
-                  width={96}
-                  height={96}
-                  className="object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]"
-                  priority
+                  className="w-24 h-24 object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]"
                 />
               </div>
             </div>
@@ -49,13 +43,11 @@ export default async function Home() {
         </header>
 
         {!isApiKeyConfigured && <SetupInstructions />}
+
         <SchoolSearch />
       </div>
 
       <Footer />
-
-      {/* Botón de migración a Supabase */}
-      {/* <MigrationButton /> */}
 
       {/* Botón para volver al inicio */}
       <ScrollToTopButton />

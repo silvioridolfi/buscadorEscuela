@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Database, Settings, LogOut, Server, RefreshCw, MapPin } from "lucide-react"
+import { Database, Settings, LogOut, Server, MapPin } from "lucide-react"
 import MigrationButton from "../tools/MigrationButton"
 import CoordinateCorrector from "../tools/CoordinateCorrector"
 
@@ -86,13 +86,6 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
               <p className="text-white/70 mb-4">
                 Esta sección está en desarrollo. Próximamente podrás configurar parámetros del sistema desde aquí.
               </p>
-              <button
-                className="w-full py-2 px-4 bg-gray-700 text-white rounded-xl hover:bg-gray-600 transition-all font-medium shadow-lg text-sm flex items-center justify-center"
-                disabled
-              >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Actualizar configuración
-              </button>
             </div>
           </div>
         )}

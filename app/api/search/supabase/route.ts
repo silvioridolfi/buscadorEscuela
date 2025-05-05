@@ -151,62 +151,72 @@ export async function GET(request: Request) {
         lonString = String(school.lon)
       }
 
-      // Log para depuración
-      console.log(`Escuela ${school.nombre} (CUE: ${school.cue}): lat=${latString}, lon=${lonString}`)
+      // Obtener todos los campos adicionales disponibles
+      const additionalFields: Record<string, any> = {}
+
+      // Agregar todos los campos de la escuela que no son estándar
+      Object.keys(school).forEach((key) => {
+        if (!["id", "cue", "nombre", "distrito", "ciudad", "direccion", "lat", "lon", "contactos"].includes(key)) {
+          additionalFields[key.toUpperCase()] = school[key]
+        }
+      })
 
       // Convertir el formato de la base de datos al formato esperado por el frontend
       return {
         CUE: school.cue.toString(),
-        PREDIO: "", // No existe en la base de datos
+        PREDIO: school.predio || "",
         ESTABLECIMIENTO: school.nombre || "",
-        FED_A_CARGO: "", // No existe en la base de datos
+        FED_A_CARGO: school.fed_a_cargo || "",
         DISTRITO: school.distrito || "",
         CIUDAD: school.ciudad || "",
         DIRECCION: school.direccion || "",
-        PLAN_ENLACE: "", // No existe en la base de datos
-        SUBPLAN_ENLACE: "", // No existe en la base de datos
-        FECHA_INICIO_CONECTIVIDAD: "", // No existe en la base de datos
-        PROVEEDOR_INTERNET_PNCE: "", // No existe en la base de datos
-        FECHA_INSTALACION_PNCE: "", // No existe en la base de datos
-        PNCE_TIPO_MEJORA: "", // No existe en la base de datos
-        PNCE_FECHA_MEJORA: "", // No existe en la base de datos
-        PNCE_ESTADO: "", // No existe en la base de datos
-        PBA_GRUPO_1_PROVEEDOR_INTERNET: "", // No existe en la base de datos
-        PBA_GRUPO_1_FECHA_INSTALACION: "", // No existe en la base de datos
-        PBA_GRUPO_1_ESTADO: "", // No existe en la base de datos
-        PBA_2019_PROVEEDOR_INTERNET: "", // No existe en la base de datos
-        PBA_2019_FECHA_INSTALACION: "", // No existe en la base de datos
-        PBA_2019_ESTADO: "", // No existe en la base de datos
-        PBA_GRUPO_2_A_PROVEEDOR_INTERNET: "", // No existe en la base de datos
-        PBA_GRUPO_2_A_FECHA_INSTALACION: "", // No existe en la base de datos
-        PBA_GRUPO_2_A_TIPO_MEJORA: "", // No existe en la base de datos
-        PBA_GRUPO_2_A_FECHA_MEJORA: "", // No existe en la base de datos
-        PBA_GRUPO_2_A_ESTADO: "", // No existe en la base de datos
-        PLAN_PISO_TECNOLOGICO: "", // No existe en la base de datos
-        PROVEEDOR_PISO_TECNOLOGICO_CUE: "", // No existe en la base de datos
-        FECHA_TERMINADO_PISO_TECNOLOGICO_CUE: "", // No existe en la base de datos
-        TIPO_MEJORA: "", // No existe en la base de datos
-        FECHA_MEJORA: "", // No existe en la base de datos
-        TIPO_PISO_INSTALADO: "", // No existe en la base de datos
-        TIPO: "", // No existe en la base de datos
-        OBSERVACIONES: "", // No existe en la base de datos
-        TIPO_ESTABLECIMIENTO: "", // No existe en la base de datos
-        LISTADO_CONEXION_INTERNET: "", // No existe en la base de datos
-        ESTADO_INSTALACION_PBA: "", // No existe en la base de datos
-        PROVEEDOR_ASIGNADO_PBA: "", // No existe en la base de datos
-        MB: "", // No existe en la base de datos
-        AMBITO: "", // No existe en la base de datos
-        CUE_ANTERIOR: "", // No existe en la base de datos
-        RECLAMOS_GRUPO_1_ANI: "", // No existe en la base de datos
-        RECURSO_PRIMARIO: "", // No existe en la base de datos
-        ACCESS_ID: "", // No existe en la base de datos
+        PLAN_ENLACE: school.plan_enlace || "",
+        SUBPLAN_ENLACE: school.subplan_enlace || "",
+        FECHA_INICIO_CONECTIVIDAD: school.fecha_inicio_conectividad || "",
+        PROVEEDOR_INTERNET_PNCE: school.proveedor_internet_pnce || "",
+        FECHA_INSTALACION_PNCE: school.fecha_instalacion_pnce || "",
+        PNCE_TIPO_MEJORA: school.pnce_tipo_mejora || "",
+        PNCE_FECHA_MEJORA: school.pnce_fecha_mejora || "",
+        PNCE_ESTADO: school.pnce_estado || "",
+        PBA_GRUPO_1_PROVEEDOR_INTERNET: school.pba_grupo_1_proveedor_internet || "",
+        PBA_GRUPO_1_FECHA_INSTALACION: school.pba_grupo_1_fecha_instalacion || "",
+        PBA_GRUPO_1_ESTADO: school.pba_grupo_1_estado || "",
+        PBA_2019_PROVEEDOR_INTERNET: school.pba_2019_proveedor_internet || "",
+        PBA_2019_FECHA_INSTALACION: school.pba_2019_fecha_instalacion || "",
+        PBA_2019_ESTADO: school.pba_2019_estado || "",
+        PBA_GRUPO_2_A_PROVEEDOR_INTERNET: school.pba_grupo_2_a_proveedor_internet || "",
+        PBA_GRUPO_2_A_FECHA_INSTALACION: school.pba_grupo_2_a_fecha_instalacion || "",
+        PBA_GRUPO_2_A_TIPO_MEJORA: school.pba_grupo_2_a_tipo_mejora || "",
+        PBA_GRUPO_2_A_FECHA_MEJORA: school.pba_grupo_2_a_fecha_mejora || "",
+        PBA_GRUPO_2_A_ESTADO: school.pba_grupo_2_a_estado || "",
+        PLAN_PISO_TECNOLOGICO: school.plan_piso_tecnologico || "",
+        PROVEEDOR_PISO_TECNOLOGICO_CUE: school.proveedor_piso_tecnologico_cue || "",
+        FECHA_TERMINADO_PISO_TECNOLOGICO_CUE: school.fecha_terminado_piso_tecnologico_cue || "",
+        TIPO_MEJORA: school.tipo_mejora || "",
+        FECHA_MEJORA: school.fecha_mejora || "",
+        TIPO_PISO_INSTALADO: school.tipo_piso_instalado || "",
+        TIPO: school.tipo || "",
+        OBSERVACIONES: school.observaciones || "",
+        TIPO_ESTABLECIMIENTO: school.tipo_establecimiento || "",
+        LISTADO_CONEXION_INTERNET: school.listado_conexion_internet || "",
+        ESTADO_INSTALACION_PBA: school.estado_instalacion_pba || "",
+        PROVEEDOR_ASIGNADO_PBA: school.proveedor_asignado_pba || "",
+        MB: school.mb || "",
+        AMBITO: school.ambito || "",
+        CUE_ANTERIOR: school.cue_anterior || "",
+        RECLAMOS_GRUPO_1_ANI: school.reclamos_grupo_1_ani || "",
+        RECURSO_PRIMARIO: school.recurso_primario || "",
+        ACCESS_ID: school.access_id || "",
         LAT: latString,
         LON: lonString,
         NOMBRE: contact.nombre || "",
         APELLIDO: contact.apellido || "",
-        CARGO: "", // No existe en la base de datos
+        CARGO: contact.cargo || "",
         TELEFONO: contact.telefono || "",
         CORREO_INSTITUCIONAL: contact.correo || "",
+
+        // Incluir campos adicionales
+        ...additionalFields,
       }
     })
 
