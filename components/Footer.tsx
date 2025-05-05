@@ -1,5 +1,5 @@
 // Add a version number to help track deployments
-const APP_VERSION = "2.0.4" // Correcciones de imágenes y mapas
+const APP_VERSION = "2.2.0" // Consolidación a Supabase como única fuente de datos
 // Generar versión automática basada en la fecha en formato latino (DD.MM.AAAA)
 const today = new Date()
 const AUTO_VERSION = `${today.getDate().toString().padStart(2, "0")}.${(today.getMonth() + 1).toString().padStart(2, "0")}.${today.getFullYear()}`

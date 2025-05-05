@@ -34,13 +34,11 @@ Proporcionar una herramienta intuitiva y eficiente para consultar información a
 
 - **Backend**:
   - API Routes de Next.js
-  - Integración con Google Sheets como fuente de datos
+  - Supabase como base de datos principal
   - Servicios de Google Maps para visualización de ubicaciones
 
 - **Integración de Datos**:
-  - SheetDB (API primaria)
-  - Sheet2API (API secundaria de respaldo)
-  - Sistema de caché y fallback para garantizar disponibilidad
+  - Supabase (fuente principal de datos)
 
 ### Estructura del Proyecto
 
@@ -64,9 +62,16 @@ Proporcionar una herramienta intuitiva y eficiente para consultar información a
 │   ├── SchoolSearch.tsx      # Componente principal de búsqueda
 │   └── ScrollToTopButton.tsx # Botón para volver al inicio
 ├── lib/                      # Utilidades y funciones auxiliares
-│   └── api-utils.ts          # Utilidades para manejo de APIs
+│   ├── api-utils.ts          # Utilidades para manejo de APIs
+│   ├── legacy-api-utils.ts   # Funciones histórica conservadas como respaldo
+│   ├── supabase.ts           # Cliente y tipos para Supabase
+│   ├── db-utils.ts           # Utilidades para acceso a base de datos
+│   └── school-utils.ts       # Utilidades específicas para escuelas
 ├── public/                   # Archivos estáticos
 │   └── images/               # Imágenes e iconos
+├── admin/                    # Componentes y herramientas administrativas
+│   ├── components/           # Componentes para el panel de administración
+│   └── tools/                # Herramientas administrativas
 └── types/                    # Definiciones de tipos TypeScript
 \`\`\`
 
@@ -99,19 +104,18 @@ Componente que integra Google Maps para mostrar la ubicación geográfica de las
 
 ## Flujo de Datos
 
-1. **Fuente de Datos**: La información se obtiene de hojas de Google Sheets a través de dos APIs:
-   - SheetDB (API primaria)
-   - Sheet2API (API secundaria de respaldo)
+1. **Fuente de Datos**: 
+   - Supabase (fuente principal y única)
 
 2. **Procesamiento de Datos**:
    - Los datos se normalizan y procesan en el servidor
-   - Se implementa un sistema de caché para mejorar el rendimiento
-   - Se aplica lógica de fallback entre APIs para garantizar disponibilidad
+   - Se aplica la lógica de búsqueda y filtrado directamente en las consultas a Supabase
 
 3. **Búsqueda y Filtrado**:
    - Búsqueda por CUE, nombre de establecimiento, distrito
-   - Algoritmos de coincidencia para mejorar resultados
+   - Algoritmos avanzados de coincidencia para mejorar resultados
    - Detección de relaciones entre escuelas (predios compartidos)
+   - Estrategias específicas para tipos de escuela + número (ej: "jardín 938")
 
 4. **Visualización**:
    - Presentación de resultados en formato de tarjetas
@@ -120,13 +124,18 @@ Componente que integra Google Maps para mostrar la ubicación geográfica de las
 
 ## APIs y Endpoints
 
-### `/api/search`
-Endpoint principal para buscar establecimientos educativos.
+### `/api/search/supabase`
+Endpoint principal para buscar establecimientos educativos usando Supabase.
 - **Parámetros**: `query` (término de búsqueda), `filter`, `district`, `level`
 - **Respuesta**: Array de escuelas que coinciden con los criterios
+- **Características especiales**: 
+  - Manejo avanzado de búsquedas tipo+número (ej: "jardín 938")
+  - Normalización de acentos y caracteres especiales
+  - Estrategias de búsqueda en dos fases para mayor precisión
+  - Enfoque flexible como respaldo cuando no hay coincidencias exactas
 
-### `/api/schools-by-predio`
-Busca escuelas que comparten un mismo predio.
+### `/api/schools-by-predio/supabase`
+Busca escuelas que comparten un mismo predio usando Supabase.
 - **Parámetros**: `predio` (número de predio)
 - **Respuesta**: Array de escuelas con el mismo predio
 
@@ -140,16 +149,22 @@ Genera URLs para embeber mapas de Google Maps.
 - **Respuesta**: URLs para visualización de mapas
 
 ### `/api/status`
-Proporciona información sobre el estado del sistema y las APIs.
-- **Respuesta**: Estado de las APIs primaria y secundaria, estado de la caché
+Proporciona información sobre el estado del sistema y la conexión con Supabase.
+- **Respuesta**: Estado de la API de Supabase y metadatos del sistema
 
 ## Características Técnicas Destacadas
 
-### Sistema de Resiliencia de APIs
-- Implementación de múltiples fuentes de datos (SheetDB y Sheet2API)
-- Detección automática de fallos y cambio entre APIs
-- Sistema de cooldown para APIs con problemas
-- Caché de datos para reducir dependencia de APIs externas
+### Simplificación de la Arquitectura
+- Eliminación de las APIs secundarias (SheetDB y Sheet2API)
+- Consolidación en una única fuente de datos (Supabase)
+- Mantenimiento de funciones históricas para referencia y plan de contingencia
+
+### Algoritmo Avanzado de Búsqueda
+- Búsqueda en dos fases para mayor precisión
+- Manejo específico para tipos de escuela + número (ej: "jardín 938")
+- Normalización de texto para manejar acentos y variaciones
+- Estrategias de respaldo para asegurar resultados relevantes
+- Filtrado post-consulta para refinar resultados
 
 ### Optimización para Dispositivos Móviles
 - Diseño completamente responsive
@@ -169,7 +184,7 @@ Proporciona información sobre el estado del sistema y las APIs.
 
 ## Consideraciones de Rendimiento
 
-- **Caché de Datos**: Implementación de caché en memoria para reducir llamadas a APIs externas
+- **Consultas Optimizadas**: Uso eficiente de consultas SQL en Supabase para mejorar el tiempo de respuesta
 - **Carga Progresiva**: Los componentes pesados (como mapas) se cargan solo cuando son necesarios
 - **Optimización de Imágenes**: Uso de Next.js Image para optimizar la carga de imágenes
 - **Prevención de Caché del Navegador**: Implementación de estrategias para evitar problemas con datos obsoletos
@@ -182,13 +197,50 @@ El sistema utiliza un esquema de versionado semántico (X.Y.Z):
 - **Y**: Nuevas características o mejoras significativas
 - **Z**: Correcciones de errores y ajustes menores
 
-La versión actual es 1.1.0, que refleja las mejoras en el diseño de las tarjetas de escuelas.
+La versión actual es 2.2.0, que refleja la consolidación a Supabase como única fuente de datos.
 
 ### Actualización de Datos
-Los datos se actualizan automáticamente desde las hojas de Google Sheets. No se requiere intervención manual para reflejar cambios en la fuente de datos.
+Los datos se actualizan mediante el panel de administración que permite ejecutar migraciones manuales a la base de datos Supabase.
+
+## Plan de Contingencia
+
+A pesar de que ahora utilizamos Supabase como única fuente de datos, mantenemos un plan de contingencia:
+
+1. El archivo `legacy-api-utils.ts` contiene todas las funciones necesarias para reconectar con las antiguas APIs (SheetDB y Sheet2API) si fuera necesario.
+2. Las modificaciones realizadas permitirían una reactivación rápida del sistema de múltiples APIs si surgieran problemas con Supabase.
+3. La documentación y el código comentado facilitan la comprensión del sistema antiguo para futuros desarrolladores.
+
+## Algoritmo de Búsqueda
+
+El sistema implementa un algoritmo de búsqueda avanzado en dos fases:
+
+### Fase 1: Consulta SQL
+- Detección de patrones tipo+número (ej: "jardín 938")
+- Manejo específico para tipos de escuela comunes (jardines, primarias, etc.)
+- Normalización de texto para manejar acentos y variaciones
+- Construcción de consultas SQL optimizadas según el tipo de búsqueda
+
+### Fase 2: Filtrado Post-Consulta
+- Verificación detallada de patrones en los nombres de escuelas
+- Manejo de variaciones en la forma de escribir números (n°, nro, etc.)
+- Estrategias específicas para jardines y otros tipos de escuela
+- Enfoque flexible como respaldo cuando no hay coincidencias exactas
+
+### Estrategias de Respaldo
+- Si el filtrado estricto no encuentra resultados, se aplica un enfoque más flexible
+- Para búsquedas numéricas, se priorizan escuelas donde el número es parte del identificador
+- Registro detallado para facilitar la depuración y mejora continua
+
+## Panel de Administración
+
+El sistema incluye un panel de administración con las siguientes funcionalidades:
+
+- **Migración de Datos**: Herramienta para sincronizar datos con Supabase
+- **Corrección de Coordenadas**: Interfaz para actualizar coordenadas geográficas de escuelas
+- **Autenticación**: Sistema de autenticación basado en tokens para proteger el acceso
 
 ## Conclusión
 
-El "Buscador de Establecimientos Educativos" es una herramienta robusta y eficiente diseñada para facilitar el acceso a información crítica sobre instituciones educativas. Su arquitectura técnica garantiza disponibilidad, rendimiento y una experiencia de usuario óptima tanto en dispositivos móviles como de escritorio.
+El "Buscador de Establecimientos Educativos" es una herramienta robusta y eficiente diseñada para facilitar el acceso a información crítica sobre instituciones educativas. Su arquitectura técnica ha sido simplificada para mejorar la mantenibilidad y rendimiento, consolidando todas las fuentes de datos en Supabase mientras se mantiene un plan de contingencia detallado.
 
 La aplicación combina tecnologías modernas de frontend con estrategias avanzadas de manejo de datos para proporcionar una solución confiable y escalable para las necesidades de la Dirección de Tecnología Educativa de la Provincia de Buenos Aires.
