@@ -136,3 +136,31 @@ body {
 .rotate-transition {
   transition: transform 0.3s ease-in-out;
 }
+
+/* Additional mobile optimizations */
+@media (max-width: 640px) {
+  .search-container {
+    padding: 1rem;
+  }
+
+  input[type="text"],
+  input[type="search"] {
+    font-size: 16px !important; /* Prevents iOS zoom on focus */
+  }
+}
+
+/* Improve tap targets on mobile */
+.mobile-tap-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Smooth transitions for mobile */
+.mobile-transition {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Prevent content jumping on mobile */
+.mobile-stable-height {
+  min-height: 3rem;
+}

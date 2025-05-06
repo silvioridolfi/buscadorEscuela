@@ -514,67 +514,65 @@ export default function SchoolSearch() {
 
   return (
     <div className="max-w-6xl mx-auto px-4" key={forceRefreshKey}>
-      {/* Search Panel - Nuevo diseño con efecto de vidrio */}
+      {/* Search Panel - Improved mobile design */}
       <div className="mb-8">
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 shadow-xl border border-white/20">
-          <form onSubmit={handleSubmit} className="mb-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              {/* Input field - Diseño mejorado */}
-              <div className="relative flex-grow">
-                <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-primary">
-                  <Search className="w-5 h-5" />
-                </div>
-                <input
-                  type="text"
-                  value={query}
-                  onChange={handleInputChange}
-                  placeholder="Ingresar CUE o nombre de establecimiento"
-                  className="w-full px-6 py-3 pl-12 rounded-xl border-2 border-white/30 focus:border-primary text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-lg bg-white/5 backdrop-blur-sm"
-                  ref={searchInputRef}
-                  autoFocus
-                />
-                {query && (
-                  <button
-                    type="button"
-                    onClick={handleClearButtonClick}
-                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-1 rounded-full transition-colors"
-                    aria-label="Limpiar búsqueda"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 md:p-6 shadow-xl border border-white/20">
+          <form onSubmit={handleSubmit} className="mb-4 md:mb-6">
+            {/* Input field - Mobile optimized */}
+            <div className="relative w-full mb-3">
+              <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-primary">
+                <Search className="w-5 h-5" />
               </div>
-
-              {/* Buttons - Diseño mejorado */}
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="px-6 py-3 rounded-xl bg-primary hover:bg-primary/90 text-white font-medium transition-colors disabled:opacity-50 shadow-lg flex items-center justify-center min-w-[120px]"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      <Search className="w-4 h-4 mr-2" />
-                      Buscar
-                    </>
-                  )}
-                </button>
+              <input
+                type="text"
+                value={query}
+                onChange={handleInputChange}
+                placeholder="Ingresar CUE o nombre de establecimiento"
+                className="w-full px-6 py-3 pl-12 rounded-xl border-2 border-white/30 focus:border-primary text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-lg bg-white/5 backdrop-blur-sm text-base"
+                ref={searchInputRef}
+                autoFocus
+              />
+              {query && (
                 <button
                   type="button"
-                  onClick={forceHardRefresh}
-                  title="Actualizar"
-                  className="px-3 py-3 rounded-xl bg-accent hover:bg-accent/90 text-white font-medium transition-colors shadow-lg flex items-center justify-center"
+                  onClick={handleClearButtonClick}
+                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-1 rounded-full transition-colors"
+                  aria-label="Limpiar búsqueda"
                 >
-                  <RefreshCw className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
-              </div>
+              )}
+            </div>
+
+            {/* Buttons - Full width on mobile, side by side on desktop */}
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                className="flex-grow px-6 py-3 rounded-xl bg-primary hover:bg-primary/90 text-white font-medium transition-colors disabled:opacity-50 shadow-lg flex items-center justify-center"
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Search className="w-4 h-4 mr-2" />
+                    Buscar
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={forceHardRefresh}
+                title="Actualizar"
+                className="px-4 py-3 rounded-xl bg-accent hover:bg-accent/90 text-white font-medium transition-colors shadow-lg flex items-center justify-center"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
             </div>
           </form>
 
           {error && (
-            <div className="bg-red-500/20 backdrop-blur-sm border-l-4 border-red-500 text-white p-4 rounded-lg mb-4">
+            <div className="bg-red-500/20 backdrop-blur-sm border-l-4 border-red-500 text-white p-4 rounded-lg">
               <div className="flex">
                 <div className="flex-shrink-0">
                   <AlertCircle className="h-5 w-5 text-red-300" />
@@ -590,10 +588,10 @@ export default function SchoolSearch() {
         {results.length > 0 && (
           <div className="mt-8 mb-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-white flex items-center">
-                <School className="w-6 h-6 mr-3" />
+              <h2 className="text-xl md:text-2xl font-bold text-white flex items-center">
+                <School className="w-5 h-5 md:w-6 md:h-6 mr-2 md:mr-3" />
                 Resultados
-                <span className="ml-3 px-4 py-1 bg-primary/20 text-white rounded-full text-sm font-normal">
+                <span className="ml-2 md:ml-3 px-3 py-0.5 md:px-4 md:py-1 bg-primary/20 text-white rounded-full text-xs md:text-sm font-normal">
                   {results.length} encontrados
                 </span>
               </h2>
