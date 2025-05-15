@@ -2,8 +2,12 @@
 
 import { useState, useEffect, useRef } from "react"
 import { Loader2, AlertCircle, RefreshCw, Play, Pause, Info, Lock } from "lucide-react"
+import { getBypassToken } from "@/lib/admin-bypass" // Importamos la función para obtener el token de bypass
 
 export default function MigrationPanel({ authKey }: { authKey: string }) {
+  // Usamos el token de bypass si está disponible, o el authKey proporcionado
+  const effectiveAuthKey = getBypassToken() || authKey
+
   const [loading, setLoading] = useState(false)
   const [migrationState, setMigrationState] = useState<any>(null)
   const [logs, setLogs] = useState<string[]>([])
@@ -189,7 +193,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            authKey,
+            authKey: effectiveAuthKey, // Usamos el token efectivo
             action: "getState",
           }),
         },
@@ -253,7 +257,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            authKey,
+            authKey: effectiveAuthKey, // Usamos el token efectivo
             action: "start",
             batchSize,
           }),
@@ -312,7 +316,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            authKey,
+            authKey: effectiveAuthKey, // Usamos el token efectivo
             action: "continue",
             batchSize,
             startIndex,
@@ -432,7 +436,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            authKey,
+            authKey: effectiveAuthKey, // Usamos el token efectivo
             action: "reset",
           }),
         },

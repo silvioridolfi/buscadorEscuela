@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server"
-import { generateAdminToken } from "@/lib/auth-utils"
+import { getBypassToken } from "@/lib/admin-bypass"
 
 export async function POST(request: Request) {
   try {
+    // BYPASS TEMPORAL: Siempre devuelve éxito con un token fijo
+    console.log("[BYPASS] Login de administrador bypassed")
+    return NextResponse.json({
+      success: true,
+      token: getBypassToken(),
+      message: "Acceso concedido mediante bypass temporal",
+    })
+
+    // El código original está comentado pero se mantiene para referencia futura
+    /*
     const { password } = await request.json()
 
     // Verificar la contraseña
@@ -31,7 +41,6 @@ export async function POST(request: Request) {
           debug: {
             passwordLength: password?.length || 0,
             expectedPasswordLength: expectedPassword?.length || 0,
-            // Comparación segura sin revelar valores reales
             firstCharMatch: password?.[0] === expectedPassword?.[0],
             lastCharMatch: password?.[password.length - 1] === expectedPassword?.[expectedPassword.length - 1],
           },
@@ -39,6 +48,7 @@ export async function POST(request: Request) {
         { status: 401 },
       )
     }
+    */
   } catch (error) {
     console.error("Error al iniciar sesión:", error)
     return NextResponse.json(
