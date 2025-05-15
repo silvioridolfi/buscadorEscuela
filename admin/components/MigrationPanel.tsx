@@ -16,6 +16,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
   const [retryCount, setRetryCount] = useState(0)
   const [maxRetries, setMaxRetries] = useState(3)
   const [retryDelay, setRetryDelay] = useState(2000)
+  const [emptyBatchCount, setEmptyBatchCount] = useState(0) // Contador para lotes vacíos
 
   // Ref para mantener el estado de migración entre renderizados
   const migrationRef = useRef({
@@ -23,6 +24,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
     currentBatchIndex: 0,
     hasError: false,
     retryAttempts: 0,
+    emptyBatchCount: 0, // Contador para lotes vacíos
   })
 
   // Función para agregar un log con timestamp
@@ -174,6 +176,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       setLastBatchError(null)
       setRawResponse(null)
       setRetryCount(0)
+      setEmptyBatchCount(0)
       addLog("Iniciando migración completa de la base de datos...")
 
       const data = await fetchWithRetry(
@@ -202,6 +205,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         currentBatchIndex: 0,
         hasError: false,
         retryAttempts: 0,
+        emptyBatchCount: 0,
       }
 
       setIsMigrating(true)
@@ -259,6 +263,27 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         }
         addLog(`Progreso total: ${data.totalProcessed} de ${data.totalRecords} (${data.progress}%)`)
         setProgress(data.progress)
+
+        // CORRECCIÓN: Detectar lotes vacíos
+        if (data.processedInBatch === 0) {
+          migrationRef.current.emptyBatchCount++
+          setEmptyBatchCount(migrationRef.current.emptyBatchCount)
+
+          // Si hemos procesado 3 lotes vacíos consecutivos, consideramos que la migración está completa
+          if (migrationRef.current.emptyBatchCount >= 3) {
+            addLog("Detectados 3 lotes vacíos consecutivos. Finalizando migración.")
+            setIsMigrating(false)
+            migrationRef.current.isMigrating = false
+
+            // Actualizar el estado de la migración
+            await getMigrationState()
+            return
+          }
+        } else {
+          // Reiniciar el contador si el lote no está vacío
+          migrationRef.current.emptyBatchCount = 0
+          setEmptyBatchCount(0)
+        }
 
         // Si hay más lotes por procesar y la migración sigue activa
         if (!data.completed && data.nextBatchStart !== null && migrationRef.current.isMigrating) {
@@ -318,6 +343,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       setLoading(true)
       setError(null)
       setRawResponse(null)
+      setEmptyBatchCount(0)
       addLog("Reiniciando migración...")
 
       const data = await fetchWithRetry(
@@ -405,6 +431,22 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
               <p className="text-sm mt-1">
                 Reintentos: {retryCount}/{maxRetries}.{" "}
                 {retryCount >= maxRetries ? "Avanzando al siguiente lote." : "Reintentando..."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {emptyBatchCount > 0 && (
+        <div className="bg-blue-900/30 border-l-4 border-blue-500 text-blue-200 p-4 mb-4 rounded">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <Info className="h-5 w-5 text-blue-400" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm">
+                Detectados {emptyBatchCount} lotes vacíos consecutivos.
+                {emptyBatchCount >= 3 ? " Migración finalizada automáticamente." : ""}
               </p>
             </div>
           </div>

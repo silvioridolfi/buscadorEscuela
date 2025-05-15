@@ -352,6 +352,38 @@ export async function POST(request: Request) {
 
         // Determinar el índice de inicio y fin para este lote
         const start = startIndex || migrationState.lastProcessedId
+
+        // CORRECCIÓN: Verificar si el índice de inicio es mayor o igual al total de registros
+        if (start >= establishments.length) {
+          console.log(
+            `Índice de inicio (${start}) es mayor o igual al total de registros (${establishments.length}). Marcando como completado.`,
+          )
+
+          // Actualizar el estado como completado
+          await updateMigrationState({
+            lastProcessedId: establishments.length,
+            completed: true,
+            totalRecords: establishments.length,
+            processedRecords: establishments.length,
+          })
+
+          return NextResponse.json({
+            success: true,
+            message: "Migración completada",
+            processedInBatch: 0,
+            totalProcessed: establishments.length,
+            totalRecords: establishments.length,
+            progress: 100,
+            nextBatchStart: null,
+            completed: true,
+            results: {
+              exitosos: 0,
+              fallidos: 0,
+              detalles: [],
+            },
+          })
+        }
+
         const end = Math.min(start + batchSize, establishments.length)
 
         console.log(`Procesando desde ${start} hasta ${end} de ${establishments.length} establecimientos`)
