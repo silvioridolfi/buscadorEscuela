@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Loader2, AlertCircle, RefreshCw, Play, Pause, Info } from "lucide-react"
+import { Loader2, AlertCircle, RefreshCw, Play, Pause, Info, Lock } from "lucide-react"
 
 export default function MigrationPanel({ authKey }: { authKey: string }) {
   const [loading, setLoading] = useState(false)
@@ -9,14 +9,15 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
   const [logs, setLogs] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isMigrating, setIsMigrating] = useState(false)
-  const [batchSize, setBatchSize] = useState(10) // Reducido a 10 para mayor estabilidad
+  const [batchSize, setBatchSize] = useState(10) // Valor predeterminado reducido a 10
   const [progress, setProgress] = useState(0)
   const [lastBatchError, setLastBatchError] = useState<string | null>(null)
   const [rawResponse, setRawResponse] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const [maxRetries, setMaxRetries] = useState(3)
   const [retryDelay, setRetryDelay] = useState(2000)
-  const [emptyBatchCount, setEmptyBatchCount] = useState(0) // Contador para lotes vacíos
+  const [emptyBatchCount, setEmptyBatchCount] = useState(0)
+  const [lockBatchSize, setLockBatchSize] = useState(false) // Nuevo estado para bloquear el tamaño del lote
 
   // Ref para mantener el estado de migración entre renderizados
   const migrationRef = useRef({
@@ -24,7 +25,8 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
     currentBatchIndex: 0,
     hasError: false,
     retryAttempts: 0,
-    emptyBatchCount: 0, // Contador para lotes vacíos
+    emptyBatchCount: 0,
+    abortControllers: new Map<string, AbortController>(),
   })
 
   // Función para agregar un log con timestamp
@@ -74,6 +76,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
   // Función para realizar una solicitud con reintentos
   const fetchWithRetry = async (url: string, options: RequestInit, maxAttempts = 3, baseDelay = 2000) => {
     let lastError: Error | null = null
+    const requestId = Date.now().toString() // ID único para esta solicitud
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
@@ -84,32 +87,67 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
           await new Promise((resolve) => setTimeout(resolve, delayTime))
         }
 
-        // Realizar la solicitud con un timeout
+        // Crear un nuevo AbortController para esta solicitud
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 segundos de timeout
+        migrationRef.current.abortControllers.set(requestId, controller)
 
-        const response = await fetch(url, {
-          ...options,
-          signal: controller.signal,
-        })
+        // Configurar un timeout más corto para evitar bloqueos largos
+        const timeoutId = setTimeout(() => {
+          addLog(`Timeout alcanzado (30s). Abortando solicitud...`)
+          controller.abort()
+        }, 30000) // 30 segundos de timeout
 
-        clearTimeout(timeoutId)
+        try {
+          const response = await fetch(url, {
+            ...options,
+            signal: controller.signal,
+          })
 
-        // Procesar la respuesta
-        const result = await safelyHandleResponse(response)
+          // Limpiar el timeout y eliminar el controller
+          clearTimeout(timeoutId)
+          migrationRef.current.abortControllers.delete(requestId)
 
-        // Si la respuesta es exitosa, devolver el resultado
-        if (result.ok) {
-          if (attempt > 0) {
-            addLog(`Solicitud exitosa después de ${attempt + 1} intentos`)
+          // Procesar la respuesta
+          const result = await safelyHandleResponse(response)
+
+          // Si la respuesta es exitosa, devolver el resultado
+          if (result.ok) {
+            if (attempt > 0) {
+              addLog(`Solicitud exitosa después de ${attempt + 1} intentos`)
+            }
+            return result.data
           }
-          return result.data
+
+          // Si la respuesta no es exitosa pero es un JSON válido, lanzar un error con el mensaje
+          throw new Error(result.data.error || "Error en la respuesta del servidor")
+        } catch (fetchError) {
+          // Limpiar el timeout si aún está activo
+          clearTimeout(timeoutId)
+          migrationRef.current.abortControllers.delete(requestId)
+
+          // Propagar el error para que sea manejado por el bloque catch externo
+          throw fetchError
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        console.error(`Error en solicitud (intento ${attempt + 1}/${maxAttempts}):`, error)
+
+        // Si es un error de timeout o abort, mostrar un mensaje más claro
+        if (errorMessage.includes("abort") || errorMessage.includes("timeout")) {
+          addLog(
+            `La solicitud fue abortada o excedió el tiempo límite. Esto puede ocurrir cuando el lote es demasiado grande.`,
+          )
+
+          // Si el tamaño del lote es grande, sugerir reducirlo
+          if (batchSize > 10 && attempt === maxAttempts - 1) {
+            const newBatchSize = Math.max(5, Math.floor(batchSize / 2))
+            addLog(
+              `Reduciendo automáticamente el tamaño del lote de ${batchSize} a ${newBatchSize} para el próximo intento.`,
+            )
+            setBatchSize(newBatchSize)
+          }
         }
 
-        // Si la respuesta no es exitosa pero es un JSON válido, lanzar un error con el mensaje
-        throw new Error(result.data.error || "Error en la respuesta del servidor")
-      } catch (error) {
-        console.error(`Error en solicitud (intento ${attempt + 1}/${maxAttempts}):`, error)
         lastError = error instanceof Error ? error : new Error(String(error))
 
         // Si es el último intento, propagar el error
@@ -121,6 +159,19 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
 
     // Este punto no debería alcanzarse, pero TypeScript lo requiere
     throw lastError || new Error("Error desconocido en la solicitud")
+  }
+
+  // Función para cancelar todas las solicitudes pendientes
+  const cancelAllRequests = () => {
+    migrationRef.current.abortControllers.forEach((controller, id) => {
+      try {
+        controller.abort()
+        addLog(`Solicitud ${id} cancelada`)
+      } catch (error) {
+        console.error(`Error al cancelar solicitud ${id}:`, error)
+      }
+    })
+    migrationRef.current.abortControllers.clear()
   }
 
   // Función para obtener el estado actual de la migración
@@ -171,6 +222,9 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
   // Función para iniciar la migración
   const startMigration = async () => {
     try {
+      // Bloquear el cambio de tamaño de lote durante la migración
+      setLockBatchSize(true)
+
       setLoading(true)
       setError(null)
       setLastBatchError(null)
@@ -178,6 +232,18 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       setRetryCount(0)
       setEmptyBatchCount(0)
       addLog("Iniciando migración completa de la base de datos...")
+
+      // Validar el tamaño del lote
+      if (batchSize > 50) {
+        addLog(`ADVERTENCIA: El tamaño del lote (${batchSize}) es muy grande. Se recomienda un valor entre 5 y 50.`)
+
+        // Si es extremadamente grande, reducirlo automáticamente
+        if (batchSize > 100) {
+          const newBatchSize = 50
+          addLog(`Reduciendo automáticamente el tamaño del lote a ${newBatchSize} para evitar timeouts.`)
+          setBatchSize(newBatchSize)
+        }
+      }
 
       const data = await fetchWithRetry(
         "/api/admin/migrate",
@@ -206,6 +272,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         hasError: false,
         retryAttempts: 0,
         emptyBatchCount: 0,
+        abortControllers: new Map(),
       }
 
       setIsMigrating(true)
@@ -216,6 +283,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       addLog(`Error: ${error.message}`)
       setIsMigrating(false)
       migrationRef.current.isMigrating = false
+      setLockBatchSize(false) // Desbloquear el cambio de tamaño de lote
     } finally {
       setLoading(false)
     }
@@ -226,6 +294,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
     // Verificar si la migración sigue activa
     if (!migrationRef.current.isMigrating) {
       addLog("Migración pausada por el usuario")
+      setLockBatchSize(false) // Desbloquear el cambio de tamaño de lote
       return
     }
 
@@ -264,7 +333,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         addLog(`Progreso total: ${data.totalProcessed} de ${data.totalRecords} (${data.progress}%)`)
         setProgress(data.progress)
 
-        // CORRECCIÓN: Detectar lotes vacíos
+        // Detectar lotes vacíos
         if (data.processedInBatch === 0) {
           migrationRef.current.emptyBatchCount++
           setEmptyBatchCount(migrationRef.current.emptyBatchCount)
@@ -274,6 +343,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             addLog("Detectados 3 lotes vacíos consecutivos. Finalizando migración.")
             setIsMigrating(false)
             migrationRef.current.isMigrating = false
+            setLockBatchSize(false) // Desbloquear el cambio de tamaño de lote
 
             // Actualizar el estado de la migración
             await getMigrationState()
@@ -298,6 +368,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
           }
           setIsMigrating(false)
           migrationRef.current.isMigrating = false
+          setLockBatchSize(false) // Desbloquear el cambio de tamaño de lote
         }
       }
     } catch (error) {
@@ -318,6 +389,8 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
           const nextIndex = startIndex + batchSize
           await new Promise((resolve) => setTimeout(resolve, retryDelay))
           await processBatch(nextIndex)
+        } else {
+          setLockBatchSize(false) // Desbloquear el cambio de tamaño de lote
         }
       } else {
         // Reintentamos el mismo lote después de una pausa
@@ -328,6 +401,8 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
           )
           await new Promise((resolve) => setTimeout(resolve, delayTime))
           await processBatch(startIndex)
+        } else {
+          setLockBatchSize(false) // Desbloquear el cambio de tamaño de lote
         }
       }
     }
@@ -345,6 +420,9 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       setRawResponse(null)
       setEmptyBatchCount(0)
       addLog("Reiniciando migración...")
+
+      // Cancelar todas las solicitudes pendientes
+      cancelAllRequests()
 
       const data = await fetchWithRetry(
         "/api/admin/migrate",
@@ -380,11 +458,19 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       migrationRef.current.isMigrating = false
       setIsMigrating(false)
       addLog("Migración pausada por el usuario")
+
+      // Cancelar todas las solicitudes pendientes
+      cancelAllRequests()
+
+      setLockBatchSize(false) // Desbloquear el cambio de tamaño de lote
     } else {
       // Reanudar
       migrationRef.current.isMigrating = true
       setIsMigrating(true)
       addLog("Reanudando migración...")
+
+      // Bloquear el cambio de tamaño de lote durante la migración
+      setLockBatchSize(true)
 
       // Reanudar desde el último índice procesado
       const startIndex = migrationRef.current.currentBatchIndex || migrationState?.lastProcessedId || 0
@@ -400,6 +486,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
     return () => {
       migrationRef.current.isMigrating = false
       setIsMigrating(false)
+      cancelAllRequests()
     }
   }, [])
 
@@ -457,20 +544,27 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         <div>
           <label className="block text-sm font-medium text-white mb-1">Tamaño de lote</label>
           <div className="flex items-center">
-            <input
-              type="number"
-              value={batchSize}
-              onChange={(e) => setBatchSize(Number.parseInt(e.target.value) || 10)}
-              min="5"
-              max="50"
-              className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-white/30 rounded-md bg-white/10 text-white"
-              disabled={isMigrating || loading}
-            />
+            <div className="relative w-full">
+              <input
+                type="number"
+                value={batchSize}
+                onChange={(e) => setBatchSize(Number.parseInt(e.target.value) || 10)}
+                min="5"
+                max="50"
+                className={`shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-white/30 rounded-md bg-white/10 text-white ${
+                  lockBatchSize ? "opacity-50" : ""
+                }`}
+                disabled={isMigrating || loading || lockBatchSize}
+              />
+              {lockBatchSize && (
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                  <Lock className="h-4 w-4 text-white/50" />
+                </div>
+              )}
+            </div>
             <span className="ml-2 text-sm text-white/70">registros</span>
           </div>
-          <p className="mt-1 text-xs text-white/70">
-            Número de registros a procesar en cada lote. Valores más pequeños son más seguros.
-          </p>
+          <p className="mt-1 text-xs text-white/70">Número de registros a procesar en cada lote. Recomendado: 5-20.</p>
         </div>
 
         <div>

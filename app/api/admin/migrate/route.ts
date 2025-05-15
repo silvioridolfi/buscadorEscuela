@@ -257,6 +257,9 @@ export async function POST(request: Request) {
 
     const { authKey, action, batchSize = 10, startIndex = 0 } = requestData
 
+    // Verificar si el tamaño del lote es demasiado grande
+    const actualBatchSize = Math.min(batchSize, 50) // Limitar a 50 registros por lote como máximo
+
     // Verificar autenticación usando la función de auth-utils
     const isAuthenticated = verifyAdminAuth(authKey)
 
@@ -325,7 +328,7 @@ export async function POST(request: Request) {
             success: true,
             message: "Migración iniciada",
             totalRecords: establishments.length,
-            batchSize,
+            batchSize: actualBatchSize,
           })
         } catch (error) {
           return handleError(error)
@@ -334,7 +337,7 @@ export async function POST(request: Request) {
 
       // Procesar un lote de datos
       try {
-        console.log(`Procesando lote desde el índice ${startIndex} con tamaño ${batchSize}...`)
+        console.log(`Procesando lote desde el índice ${startIndex} con tamaño ${actualBatchSize}...`)
 
         // Obtener datos de establecimientos
         const establishments = await getSheetData("establecimientos")
@@ -353,7 +356,7 @@ export async function POST(request: Request) {
         // Determinar el índice de inicio y fin para este lote
         const start = startIndex || migrationState.lastProcessedId
 
-        // CORRECCIÓN: Verificar si el índice de inicio es mayor o igual al total de registros
+        // Verificar si el índice de inicio es mayor o igual al total de registros
         if (start >= establishments.length) {
           console.log(
             `Índice de inicio (${start}) es mayor o igual al total de registros (${establishments.length}). Marcando como completado.`,
@@ -384,7 +387,7 @@ export async function POST(request: Request) {
           })
         }
 
-        const end = Math.min(start + batchSize, establishments.length)
+        const end = Math.min(start + actualBatchSize, establishments.length)
 
         console.log(`Procesando desde ${start} hasta ${end} de ${establishments.length} establecimientos`)
 
