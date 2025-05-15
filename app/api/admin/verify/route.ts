@@ -8,13 +8,13 @@ export async function POST(request: Request) {
     // Verificar el token
     const isValid = verifyAdminAuth(token)
 
-    if (!isValid) {
-      return NextResponse.json({ error: "Token inválido" }, { status: 401 })
+    if (isValid) {
+      return NextResponse.json({ success: true })
+    } else {
+      return NextResponse.json({ success: false, error: "Token inválido" }, { status: 401 })
     }
-
-    return NextResponse.json({ valid: true })
   } catch (error) {
-    console.error("Error en la API de verificación:", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+    console.error("Error al verificar el token:", error)
+    return NextResponse.json({ success: false, error: "Error al verificar el token" }, { status: 500 })
   }
 }

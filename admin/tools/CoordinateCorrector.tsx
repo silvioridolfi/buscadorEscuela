@@ -3,7 +3,11 @@
 import { useState } from "react"
 import { MapPin, Search, RefreshCw, CheckCircle, AlertTriangle, Save } from "lucide-react"
 
-export default function CoordinateCorrector() {
+interface CoordinateCorrectorProps {
+  authKey?: string
+}
+
+export default function CoordinateCorrector({ authKey = "" }: CoordinateCorrectorProps) {
   const [cue, setCue] = useState("")
   const [schoolInfo, setSchoolInfo] = useState<any>(null)
   const [newLat, setNewLat] = useState("")
@@ -94,8 +98,8 @@ export default function CoordinateCorrector() {
     setUpdateSuccess(false)
 
     try {
-      // Obtener la clave de migración
-      const migrationKey = prompt("Ingrese la clave de migración:")
+      // Usar la clave de autenticación proporcionada
+      const migrationKey = authKey || prompt("Ingrese la clave de migración:")
 
       if (!migrationKey) {
         setUpdateError("Se requiere una clave de migración")

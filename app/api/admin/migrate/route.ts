@@ -1,15 +1,10 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin, generateUUID } from "@/lib/supabase"
 import { getSheetData } from "@/lib/legacy-api-utils"
+import { verifyAdminAuth } from "@/lib/auth-utils"
 
 export const dynamic = "force-dynamic"
 export const fetchCache = "force-no-store"
-
-// Función para verificar la autenticación
-function isAuthenticated(authKey: string | null) {
-  const expectedKey = process.env.MIGRATION_AUTH_KEY
-  return authKey === expectedKey
-}
 
 // Función para obtener el estado actual de la migración
 async function getMigrationState() {
@@ -76,8 +71,18 @@ export async function POST(request: Request) {
     const data = await request.json()
     const { authKey, action, batchSize = 50, startIndex = 0 } = data
 
-    // Verificar autenticación
-    if (!isAuthenticated(authKey)) {
+    // Verificar autenticación usando la función de auth-utils
+    const isAuthenticated = verifyAdminAuth(authKey)
+
+    // Para depuración, imprimir información sobre las claves (sin mostrar los valores completos)
+    console.log("[SERVER] Clave proporcionada:", authKey ? `${authKey.substring(0, 3)}...` : "null")
+    console.log(
+      "[SERVER] Clave esperada:",
+      process.env.MIGRATION_AUTH_KEY ? `${process.env.MIGRATION_AUTH_KEY.substring(0, 3)}...` : "null",
+    )
+
+    if (!isAuthenticated) {
+      console.error("[SERVER] Error de autenticación: Clave no válida")
       return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 })
     }
 
@@ -91,6 +96,9 @@ export async function POST(request: Request) {
         state: migrationState,
       })
     }
+
+    // El resto del código permanece igual...
+    // ... (código existente para start, continue, reset)
 
     // Si se solicita iniciar/continuar la migración
     if (action === "start" || action === "continue") {

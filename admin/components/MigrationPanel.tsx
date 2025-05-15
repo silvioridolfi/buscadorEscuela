@@ -213,14 +213,14 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
   }, [])
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-      <h2 className="text-xl font-bold mb-4">Panel de Migración de Datos</h2>
+    <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6 border border-white/20 shadow-xl">
+      <h2 className="text-xl font-bold mb-4 text-white">Panel de Migración de Datos</h2>
 
       {error && (
-        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded">
+        <div className="bg-red-900/30 border-l-4 border-red-500 text-red-200 p-4 mb-4 rounded">
           <div className="flex">
             <div className="flex-shrink-0">
-              <AlertCircle className="h-5 w-5 text-red-500" />
+              <AlertCircle className="h-5 w-5 text-red-400" />
             </div>
             <div className="ml-3">
               <p className="text-sm">{error}</p>
@@ -230,7 +230,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       )}
 
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Tamaño de lote</label>
+        <label className="block text-sm font-medium text-white mb-1">Tamaño de lote</label>
         <div className="flex items-center">
           <input
             type="number"
@@ -238,25 +238,25 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             onChange={(e) => setBatchSize(Number.parseInt(e.target.value) || 50)}
             min="10"
             max="500"
-            className="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+            className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-white/30 rounded-md bg-white/10 text-white"
             disabled={isMigrating || loading}
           />
-          <span className="ml-2 text-sm text-gray-500">registros</span>
+          <span className="ml-2 text-sm text-white/70">registros</span>
         </div>
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-white/70">
           Número de registros a procesar en cada lote. Valores más pequeños son más seguros pero más lentos.
         </p>
       </div>
 
       {/* Barra de progreso */}
       <div className="mb-4">
-        <div className="flex justify-between text-xs text-gray-600 mb-1">
+        <div className="flex justify-between text-xs text-white/70 mb-1">
           <span>Progreso</span>
           <span>{progress}%</span>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-2.5">
+        <div className="w-full bg-gray-700 rounded-full h-2.5">
           <div
-            className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-in-out"
+            className="bg-primary h-2.5 rounded-full transition-all duration-300 ease-in-out"
             style={{ width: `${progress}%` }}
           ></div>
         </div>
@@ -266,7 +266,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         <button
           onClick={startMigration}
           disabled={isMigrating || loading}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary/50 disabled:opacity-50"
         >
           {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
           Iniciar Migración
@@ -277,8 +277,8 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             onClick={toggleMigration}
             disabled={loading}
             className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white ${
-              isMigrating ? "bg-yellow-600 hover:bg-yellow-700" : "bg-green-600 hover:bg-green-700"
-            } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50`}
+              isMigrating ? "bg-amber-600 hover:bg-amber-700" : "bg-green-600 hover:bg-green-700"
+            } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary/50 disabled:opacity-50`}
           >
             {isMigrating ? (
               <>
@@ -306,7 +306,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         <button
           onClick={getMigrationState}
           disabled={loading}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+          className="inline-flex items-center px-4 py-2 border border-white/30 text-sm font-medium rounded-md shadow-sm text-white bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary/50 disabled:opacity-50"
         >
           <RefreshCw className="w-4 h-4 mr-2" />
           Actualizar Estado
@@ -315,24 +315,24 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
 
       {/* Estado de la migración */}
       {migrationState && (
-        <div className="mb-6 bg-gray-50 p-4 rounded-md">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Estado de la migración</h3>
+        <div className="mb-6 bg-gray-800/50 p-4 rounded-md border border-white/10">
+          <h3 className="text-sm font-medium text-white mb-2">Estado de la migración</h3>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="text-gray-500">Estado:</span>{" "}
-              <span className={`font-medium ${migrationState.completed ? "text-green-600" : "text-yellow-600"}`}>
+              <span className="text-white/70">Estado:</span>{" "}
+              <span className={`font-medium ${migrationState.completed ? "text-green-400" : "text-amber-400"}`}>
                 {migrationState.completed ? "Completada" : "En progreso"}
               </span>
             </div>
             <div>
-              <span className="text-gray-500">Registros procesados:</span>{" "}
-              <span className="font-medium">
+              <span className="text-white/70">Registros procesados:</span>{" "}
+              <span className="font-medium text-white">
                 {migrationState.processedRecords} / {migrationState.totalRecords}
               </span>
             </div>
             <div>
-              <span className="text-gray-500">Progreso:</span>{" "}
-              <span className="font-medium">
+              <span className="text-white/70">Progreso:</span>{" "}
+              <span className="font-medium text-white">
                 {migrationState.totalRecords > 0
                   ? Math.round((migrationState.processedRecords / migrationState.totalRecords) * 100)
                   : 0}
@@ -340,8 +340,8 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
               </span>
             </div>
             <div>
-              <span className="text-gray-500">Último índice procesado:</span>{" "}
-              <span className="font-medium">{migrationState.lastProcessedId}</span>
+              <span className="text-white/70">Último índice procesado:</span>{" "}
+              <span className="font-medium text-white">{migrationState.lastProcessedId}</span>
             </div>
           </div>
         </div>
@@ -349,8 +349,8 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
 
       {/* Logs */}
       <div>
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Logs de migración</h3>
-        <div className="bg-gray-800 text-gray-200 p-4 rounded-md h-64 overflow-y-auto font-mono text-xs">
+        <h3 className="text-sm font-medium text-white mb-2">Logs de migración</h3>
+        <div className="bg-gray-900/70 text-gray-200 p-4 rounded-md h-64 overflow-y-auto font-mono text-xs border border-white/10">
           {logs.length > 0 ? (
             logs.map((log, index) => (
               <div key={index} className="mb-1">
