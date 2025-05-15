@@ -177,6 +177,18 @@ async function fetchApiData(isContactsData = false) {
 export async function getSheetData(sheet: string, retries = 3, delay = 1000): Promise<any[]> {
   let lastError: Error | null = null
 
+  // Verificar si hay datos en caché
+  const now = Date.now()
+  if (sheet === "establecimientos" && cachedEstablishmentsData && now - cacheTimestamp < CACHE_DURATION) {
+    console.log("Usando datos de establecimientos en caché")
+    return cachedEstablishmentsData
+  }
+
+  if (sheet === "contactos" && cachedContactsData && now - cacheTimestamp < CACHE_DURATION) {
+    console.log("Usando datos de contactos en caché")
+    return cachedContactsData
+  }
+
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       // Si no es el primer intento, esperar antes de reintentar
@@ -185,43 +197,34 @@ export async function getSheetData(sheet: string, retries = 3, delay = 1000): Pr
         await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, attempt - 1)))
       }
 
-      // Determinar la URL de la API según la hoja
-      let apiUrl: string
+      // Usar las URLs originales que sabemos que funcionan
+      let data: any[]
 
       if (sheet === "establecimientos") {
-        apiUrl = "https://sheetdb.io/api/v1/0rlxq8j9hs9uf"
+        // Intentar obtener datos usando la API original
+        data = await fetchApiData(false)
       } else if (sheet === "contactos") {
-        apiUrl = "https://sheetdb.io/api/v1/aqvxfhbf9qn4j"
+        // Intentar obtener datos usando la API original
+        data = await fetchApiData(true)
       } else {
         throw new Error(`Hoja no válida: ${sheet}`)
       }
-
-      // Realizar la solicitud con un timeout
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 segundos de timeout
-
-      const response = await fetch(apiUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        signal: controller.signal,
-        cache: "no-store",
-      })
-
-      clearTimeout(timeoutId)
-
-      if (!response.ok) {
-        throw new Error(`Error al obtener datos de ${sheet}: ${response.status} ${response.statusText}`)
-      }
-
-      const data = await response.json()
 
       if (!Array.isArray(data)) {
         throw new Error(`Respuesta no válida para ${sheet}: no es un array`)
       }
 
       console.log(`Datos obtenidos correctamente de ${sheet}: ${data.length} registros`)
+
+      // Actualizar caché
+      if (sheet === "establecimientos") {
+        cachedEstablishmentsData = data
+      } else {
+        cachedContactsData = data
+      }
+
+      cacheTimestamp = now
+
       return data
     } catch (error) {
       console.error(`Error al obtener datos de ${sheet} (intento ${attempt + 1}/${retries}):`, error)
@@ -229,6 +232,17 @@ export async function getSheetData(sheet: string, retries = 3, delay = 1000): Pr
 
       // Si es el último intento, propagar el error
       if (attempt === retries - 1) {
+        // Si tenemos datos en caché, aunque estén expirados, los devolvemos como último recurso
+        if (sheet === "establecimientos" && cachedEstablishmentsData) {
+          console.log("Devolviendo datos de establecimientos en caché expirados como último recurso")
+          return cachedEstablishmentsData
+        }
+
+        if (sheet === "contactos" && cachedContactsData) {
+          console.log("Devolviendo datos de contactos en caché expirados como último recurso")
+          return cachedContactsData
+        }
+
         throw lastError
       }
     }
@@ -237,8 +251,6 @@ export async function getSheetData(sheet: string, retries = 3, delay = 1000): Pr
   // Este punto no debería alcanzarse, pero TypeScript lo requiere
   throw lastError || new Error(`Error desconocido al obtener datos de ${sheet}`)
 }
-
-// Resto del código existente...
 
 /**
  * Get the legacy APIs status for debugging
