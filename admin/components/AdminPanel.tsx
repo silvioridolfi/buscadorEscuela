@@ -2,8 +2,8 @@
 
 import { useState } from "react"
 import { Database, Settings, LogOut, Server, MapPin } from "lucide-react"
+import MigrationButton from "../tools/MigrationButton"
 import CoordinateCorrector from "../tools/CoordinateCorrector"
-import { MigrationPanel } from "./MigrationPanel"
 
 interface AdminPanelProps {
   onLogout: () => void
@@ -11,7 +11,6 @@ interface AdminPanelProps {
 
 export default function AdminPanel({ onLogout }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<"migration" | "coordinates" | "settings">("migration")
-  const [authToken, setAuthToken] = useState<string | null>(null)
 
   return (
     <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shadow-xl w-full max-w-4xl">
@@ -69,7 +68,7 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
         {activeTab === "migration" && (
           <div>
             <h3 className="text-lg font-bold text-white mb-4">Herramientas de Migración</h3>
-            <MigrationPanel authToken={authToken} />
+            <MigrationButton />
           </div>
         )}
 
