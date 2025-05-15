@@ -7,6 +7,22 @@ export const dynamic = "force-dynamic"
 export const fetchCache = "force-no-store"
 export const revalidate = 0
 
+// Función para manejar errores y siempre devolver JSON válido
+function handleError(error: any, status = 500) {
+  console.error("Error en la API de migración:", error)
+
+  // Asegurarse de que siempre devolvemos un objeto JSON válido
+  return NextResponse.json(
+    {
+      success: false,
+      error: error instanceof Error ? error.message : "Error desconocido",
+      stack: process.env.NODE_ENV === "development" ? (error instanceof Error ? error.stack : null) : null,
+      timestamp: new Date().toISOString(),
+    },
+    { status },
+  )
+}
+
 // Función para obtener el estado actual de la migración
 async function getMigrationState() {
   try {
@@ -112,22 +128,20 @@ async function ensureTablesExist() {
 export async function POST(request: Request) {
   try {
     // Obtener datos de la solicitud
-    const data = await request.json()
-    const { authKey, action, batchSize = 50, startIndex = 0 } = data
+    let requestData
+    try {
+      requestData = await request.json()
+    } catch (parseError) {
+      return handleError(new Error("Error al parsear el cuerpo de la solicitud: " + parseError.message), 400)
+    }
+
+    const { authKey, action, batchSize = 25, startIndex = 0 } = requestData
 
     // Verificar autenticación usando la función de auth-utils
     const isAuthenticated = verifyAdminAuth(authKey)
 
-    // Para depuración, imprimir información sobre las claves (sin mostrar los valores completos)
-    console.log("[SERVER] Clave proporcionada:", authKey ? `${authKey.substring(0, 3)}...` : "null")
-    console.log(
-      "[SERVER] Clave esperada:",
-      process.env.MIGRATION_AUTH_KEY ? `${process.env.MIGRATION_AUTH_KEY.substring(0, 3)}...` : "null",
-    )
-
     if (!isAuthenticated) {
-      console.error("[SERVER] Error de autenticación: Clave no válida")
-      return NextResponse.json({ success: false, error: "No autorizado" }, { status: 401 })
+      return handleError(new Error("No autorizado: Clave de autenticación inválida"), 401)
     }
 
     // Asegurar que las tablas necesarias existan
@@ -163,13 +177,7 @@ export async function POST(request: Request) {
           const establishments = await getSheetData("establecimientos")
 
           if (!establishments || !Array.isArray(establishments) || establishments.length === 0) {
-            return NextResponse.json(
-              {
-                success: false,
-                error: "No se pudieron obtener los datos de establecimientos",
-              },
-              { status: 500 },
-            )
+            return handleError(new Error("No se pudieron obtener los datos de establecimientos"), 500)
           }
 
           console.log(`Obtenidos ${establishments.length} establecimientos`)
@@ -179,13 +187,7 @@ export async function POST(request: Request) {
           const contacts = await getSheetData("contactos")
 
           if (!contacts || !Array.isArray(contacts)) {
-            return NextResponse.json(
-              {
-                success: false,
-                error: "No se pudieron obtener los datos de contactos",
-              },
-              { status: 500 },
-            )
+            return handleError(new Error("No se pudieron obtener los datos de contactos"), 500)
           }
 
           console.log(`Obtenidos ${contacts.length} contactos`)
@@ -206,14 +208,7 @@ export async function POST(request: Request) {
             batchSize,
           })
         } catch (error) {
-          console.error("Error al iniciar la migración:", error)
-          return NextResponse.json(
-            {
-              success: false,
-              error: "Error al iniciar la migración: " + (error.message || "Error desconocido"),
-            },
-            { status: 500 },
-          )
+          return handleError(error)
         }
       }
 
@@ -225,26 +220,14 @@ export async function POST(request: Request) {
         const establishments = await getSheetData("establecimientos")
 
         if (!establishments || !Array.isArray(establishments) || establishments.length === 0) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: "No se pudieron obtener los datos de establecimientos",
-            },
-            { status: 500 },
-          )
+          return handleError(new Error("No se pudieron obtener los datos de establecimientos"), 500)
         }
 
         // Obtener datos de contactos
         const contacts = await getSheetData("contactos")
 
         if (!contacts || !Array.isArray(contacts)) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: "No se pudieron obtener los datos de contactos",
-            },
-            { status: 500 },
-          )
+          return handleError(new Error("No se pudieron obtener los datos de contactos"), 500)
         }
 
         // Determinar el índice de inicio y fin para este lote
@@ -424,14 +407,7 @@ export async function POST(request: Request) {
           },
         })
       } catch (error) {
-        console.error("Error al procesar lote:", error)
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Error al procesar lote: " + (error.message || "Error desconocido"),
-          },
-          { status: 500 },
-        )
+        return handleError(error)
       }
     }
 
@@ -458,32 +434,12 @@ export async function POST(request: Request) {
           message: "Migración reiniciada correctamente",
         })
       } catch (error) {
-        console.error("Error al reiniciar la migración:", error)
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Error al reiniciar la migración: " + (error.message || "Error desconocido"),
-          },
-          { status: 500 },
-        )
+        return handleError(error)
       }
     }
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Acción no válida",
-      },
-      { status: 400 },
-    )
+    return handleError(new Error("Acción no válida"), 400)
   } catch (error) {
-    console.error("Error en la ruta de migración:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Error interno del servidor: " + (error.message || "Error desconocido"),
-      },
-      { status: 500 },
-    )
+    return handleError(error)
   }
 }

@@ -9,9 +9,10 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
   const [logs, setLogs] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isMigrating, setIsMigrating] = useState(false)
-  const [batchSize, setBatchSize] = useState(50)
+  const [batchSize, setBatchSize] = useState(25) // Reducido a 25 para mayor estabilidad
   const [progress, setProgress] = useState(0)
   const [lastBatchError, setLastBatchError] = useState<string | null>(null)
+  const [rawResponse, setRawResponse] = useState<string | null>(null)
 
   // Ref para mantener el estado de migración entre renderizados
   const migrationRef = useRef({
@@ -24,6 +25,43 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString()
     setLogs((prevLogs) => [`[${timestamp}] ${message}`, ...prevLogs])
+  }
+
+  // Función para manejar respuestas de fetch de forma segura
+  const safelyHandleResponse = async (response: Response) => {
+    try {
+      // Primero obtenemos el texto de la respuesta
+      const text = await response.text()
+
+      // Guardamos la respuesta en bruto para depuración
+      setRawResponse(text)
+
+      // Intentamos parsear como JSON
+      try {
+        const data = JSON.parse(text)
+        return { ok: response.ok, data }
+      } catch (parseError) {
+        // Si no es JSON válido, devolvemos un objeto de error
+        console.error("Error al parsear JSON:", parseError)
+        addLog(`Error al parsear respuesta: ${parseError.message}`)
+        return {
+          ok: false,
+          data: {
+            error: `Error al parsear respuesta: ${parseError.message}`,
+            rawResponse: text.substring(0, 500) + (text.length > 500 ? "..." : ""),
+          },
+        }
+      }
+    } catch (error) {
+      console.error("Error al procesar respuesta:", error)
+      addLog(`Error al procesar respuesta: ${error.message}`)
+      return {
+        ok: false,
+        data: {
+          error: `Error al procesar respuesta: ${error.message}`,
+        },
+      }
+    }
   }
 
   // Función para obtener el estado actual de la migración
@@ -44,9 +82,9 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         }),
       })
 
-      const data = await response.json()
+      const { ok, data } = await safelyHandleResponse(response)
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(data.error || "Error al obtener el estado de la migración")
       }
 
@@ -78,6 +116,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       setLoading(true)
       setError(null)
       setLastBatchError(null)
+      setRawResponse(null)
       addLog("Iniciando migración completa de la base de datos...")
 
       const response = await fetch("/api/admin/migrate", {
@@ -92,9 +131,9 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         }),
       })
 
-      const data = await response.json()
+      const { ok, data } = await safelyHandleResponse(response)
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(data.error || "Error al iniciar la migración")
       }
 
@@ -132,6 +171,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
     try {
       addLog(`Procesando lote desde el índice ${startIndex}...`)
       setLastBatchError(null)
+      setRawResponse(null)
 
       const response = await fetch("/api/admin/migrate", {
         method: "POST",
@@ -146,9 +186,9 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         }),
       })
 
-      const data = await response.json()
+      const { ok, data } = await safelyHandleResponse(response)
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(data.error || "Error al procesar lote")
       }
 
@@ -157,6 +197,9 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         migrationRef.current.currentBatchIndex = data.nextBatchStart || 0
 
         addLog(`Lote procesado. ${data.processedInBatch} registros procesados.`)
+        if (data.results) {
+          addLog(`Exitosos: ${data.results.exitosos}, Fallidos: ${data.results.fallidos}`)
+        }
         addLog(`Progreso total: ${data.totalProcessed} de ${data.totalRecords} (${data.progress}%)`)
         setProgress(data.progress)
 
@@ -202,6 +245,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
     try {
       setLoading(true)
       setError(null)
+      setRawResponse(null)
       addLog("Reiniciando migración...")
 
       const response = await fetch("/api/admin/migrate", {
@@ -215,9 +259,9 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         }),
       })
 
-      const data = await response.json()
+      const { ok, data } = await safelyHandleResponse(response)
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(data.error || "Error al reiniciar la migración")
       }
 
@@ -299,9 +343,9 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
           <input
             type="number"
             value={batchSize}
-            onChange={(e) => setBatchSize(Number.parseInt(e.target.value) || 50)}
-            min="10"
-            max="500"
+            onChange={(e) => setBatchSize(Number.parseInt(e.target.value) || 25)}
+            min="5"
+            max="100"
             className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-white/30 rounded-md bg-white/10 text-white"
             disabled={isMigrating || loading}
           />
@@ -426,6 +470,17 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
           )}
         </div>
       </div>
+
+      {/* Respuesta en bruto para depuración */}
+      {rawResponse && (
+        <div className="mt-4">
+          <h3 className="text-sm font-medium text-white mb-2">Respuesta en bruto (para depuración)</h3>
+          <div className="bg-gray-900/70 text-gray-200 p-4 rounded-md max-h-40 overflow-y-auto font-mono text-xs border border-white/10">
+            {rawResponse.substring(0, 1000)}
+            {rawResponse.length > 1000 ? "..." : ""}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
