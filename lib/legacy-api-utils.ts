@@ -207,7 +207,20 @@ export async function getSheetData(sheet: string, retries = 3, delay = 1000): Pr
         // Intentar obtener datos usando la API original
         data = await fetchApiData(true)
       } else {
-        throw new Error(`Hoja no válida: ${sheet}`)
+        // Para otras hojas, construir la URL adecuada
+        const activeApi = getActiveApi()
+        const url = `${activeApi.baseUrl}?sheet=${encodeURIComponent(sheet)}`
+
+        try {
+          const response = await fetchWithRetry(url)
+          if (!response.ok) {
+            throw new Error(`Error al obtener datos de la hoja ${sheet}: ${response.status}`)
+          }
+          data = await response.json()
+        } catch (error) {
+          console.error(`Error al obtener datos de la hoja ${sheet}:`, error)
+          throw error
+        }
       }
 
       if (!Array.isArray(data)) {
@@ -216,10 +229,10 @@ export async function getSheetData(sheet: string, retries = 3, delay = 1000): Pr
 
       console.log(`Datos obtenidos correctamente de ${sheet}: ${data.length} registros`)
 
-      // Actualizar caché
+      // Actualizar caché solo para las hojas principales
       if (sheet === "establecimientos") {
         cachedEstablishmentsData = data
-      } else {
+      } else if (sheet === "contactos") {
         cachedContactsData = data
       }
 
