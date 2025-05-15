@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Loader2, AlertCircle, RefreshCw, Play, Pause } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import { Loader2, AlertCircle, RefreshCw, Play, Pause, Info } from "lucide-react"
 
 export default function MigrationPanel({ authKey }: { authKey: string }) {
   const [loading, setLoading] = useState(false)
@@ -11,6 +11,14 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
   const [isMigrating, setIsMigrating] = useState(false)
   const [batchSize, setBatchSize] = useState(50)
   const [progress, setProgress] = useState(0)
+  const [lastBatchError, setLastBatchError] = useState<string | null>(null)
+
+  // Ref para mantener el estado de migración entre renderizados
+  const migrationRef = useRef({
+    isMigrating: false,
+    currentBatchIndex: 0,
+    hasError: false,
+  })
 
   // Función para agregar un log con timestamp
   const addLog = (message: string) => {
@@ -22,6 +30,9 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
   const getMigrationState = async () => {
     try {
       setLoading(true)
+      setError(null)
+      addLog("Obteniendo estado de migración...")
+
       const response = await fetch("/api/admin/migrate", {
         method: "POST",
         headers: {
@@ -42,7 +53,9 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       setMigrationState(data.state)
 
       if (data.state.totalRecords > 0) {
-        setProgress(Math.round((data.state.processedRecords / data.state.totalRecords) * 100))
+        const calculatedProgress = Math.round((data.state.processedRecords / data.state.totalRecords) * 100)
+        setProgress(calculatedProgress)
+        addLog(`Progreso actual: ${calculatedProgress}%`)
       }
 
       addLog(`Estado de migración: ${data.state.completed ? "Completada" : "Pendiente"}`)
@@ -64,6 +77,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
     try {
       setLoading(true)
       setError(null)
+      setLastBatchError(null)
       addLog("Iniciando migración completa de la base de datos...")
 
       const response = await fetch("/api/admin/migrate", {
@@ -85,9 +99,15 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       }
 
       addLog(`Migración iniciada. Total de registros: ${data.totalRecords}`)
-      addLog(`Tamaño de lote: ${data.batchSize} registros`)
+      addLog(`Tamaño de lote: ${batchSize} registros`)
 
       // Iniciar el proceso de migración por lotes
+      migrationRef.current = {
+        isMigrating: true,
+        currentBatchIndex: 0,
+        hasError: false,
+      }
+
       setIsMigrating(true)
       await processBatch(0)
     } catch (error) {
@@ -95,6 +115,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       setError(error.message || "Error al iniciar la migración")
       addLog(`Error: ${error.message}`)
       setIsMigrating(false)
+      migrationRef.current.isMigrating = false
     } finally {
       setLoading(false)
     }
@@ -102,13 +123,15 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
 
   // Función para procesar un lote de datos
   const processBatch = async (startIndex: number) => {
-    if (!isMigrating) {
+    // Verificar si la migración sigue activa
+    if (!migrationRef.current.isMigrating) {
       addLog("Migración pausada por el usuario")
       return
     }
 
     try {
       addLog(`Procesando lote desde el índice ${startIndex}...`)
+      setLastBatchError(null)
 
       const response = await fetch("/api/admin/migrate", {
         method: "POST",
@@ -129,30 +152,44 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         throw new Error(data.error || "Error al procesar lote")
       }
 
-      addLog(`Lote procesado. ${data.processedInBatch} registros procesados.`)
-      addLog(`Progreso total: ${data.totalProcessed} de ${data.totalRecords} (${data.progress}%)`)
-      setProgress(data.progress)
+      // Actualizar el estado de la migración solo si seguimos migrando
+      if (migrationRef.current.isMigrating) {
+        migrationRef.current.currentBatchIndex = data.nextBatchStart || 0
 
-      // Actualizar el estado de la migración
-      await getMigrationState()
+        addLog(`Lote procesado. ${data.processedInBatch} registros procesados.`)
+        addLog(`Progreso total: ${data.totalProcessed} de ${data.totalRecords} (${data.progress}%)`)
+        setProgress(data.progress)
 
-      // Si hay más lotes por procesar y la migración sigue activa
-      if (!data.completed && data.nextBatchStart !== null && isMigrating) {
-        // Esperar un poco para no sobrecargar el servidor
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        // Procesar el siguiente lote
-        await processBatch(data.nextBatchStart)
-      } else {
-        if (data.completed) {
-          addLog("¡Migración completada con éxito!")
+        // Si hay más lotes por procesar y la migración sigue activa
+        if (!data.completed && data.nextBatchStart !== null && migrationRef.current.isMigrating) {
+          // Esperar un poco para no sobrecargar el servidor
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+
+          // Procesar el siguiente lote
+          await processBatch(data.nextBatchStart)
+        } else {
+          if (data.completed) {
+            addLog("¡Migración completada con éxito!")
+          }
+          setIsMigrating(false)
+          migrationRef.current.isMigrating = false
         }
-        setIsMigrating(false)
       }
     } catch (error) {
       console.error("Error al procesar lote:", error)
-      setError(error.message || "Error al procesar lote")
-      addLog(`Error: ${error.message}`)
-      setIsMigrating(false)
+      setLastBatchError(error.message || "Error al procesar lote")
+      addLog(`Error en lote: ${error.message}`)
+
+      // No paramos la migración por un error en un lote, intentamos continuar
+      // con el siguiente lote después de una pausa
+      if (migrationRef.current.isMigrating) {
+        addLog("Intentando continuar con el siguiente lote después de 3 segundos...")
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+
+        // Avanzamos al siguiente lote
+        const nextIndex = startIndex + batchSize
+        await processBatch(nextIndex)
+      }
     }
   }
 
@@ -198,18 +235,31 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
   // Función para pausar/reanudar la migración
   const toggleMigration = () => {
     if (isMigrating) {
+      // Pausar
+      migrationRef.current.isMigrating = false
       setIsMigrating(false)
-      addLog("Migración pausada")
+      addLog("Migración pausada por el usuario")
     } else {
+      // Reanudar
+      migrationRef.current.isMigrating = true
       setIsMigrating(true)
       addLog("Reanudando migración...")
-      processBatch(migrationState?.lastProcessedId || 0)
+
+      // Reanudar desde el último índice procesado
+      const startIndex = migrationRef.current.currentBatchIndex || migrationState?.lastProcessedId || 0
+      processBatch(startIndex)
     }
   }
 
   // Obtener el estado inicial al cargar el componente
   useEffect(() => {
     getMigrationState()
+
+    // Limpiar el estado de migración cuando se desmonta el componente
+    return () => {
+      migrationRef.current.isMigrating = false
+      setIsMigrating(false)
+    }
   }, [])
 
   return (
@@ -224,6 +274,20 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             </div>
             <div className="ml-3">
               <p className="text-sm">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {lastBatchError && (
+        <div className="bg-amber-900/30 border-l-4 border-amber-500 text-amber-200 p-4 mb-4 rounded">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <Info className="h-5 w-5 text-amber-400" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm">Error en el último lote: {lastBatchError}</p>
+              <p className="text-sm mt-1">La migración intentará continuar con el siguiente lote.</p>
             </div>
           </div>
         </div>
@@ -272,27 +336,25 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
           Iniciar Migración
         </button>
 
-        {migrationState && !migrationState.completed && (
-          <button
-            onClick={toggleMigration}
-            disabled={loading}
-            className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white ${
-              isMigrating ? "bg-amber-600 hover:bg-amber-700" : "bg-green-600 hover:bg-green-700"
-            } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary/50 disabled:opacity-50`}
-          >
-            {isMigrating ? (
-              <>
-                <Pause className="w-4 h-4 mr-2" />
-                Pausar
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 mr-2" />
-                Reanudar
-              </>
-            )}
-          </button>
-        )}
+        <button
+          onClick={toggleMigration}
+          disabled={loading || (!isMigrating && (!migrationState || migrationState.completed))}
+          className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white ${
+            isMigrating ? "bg-amber-600 hover:bg-amber-700" : "bg-green-600 hover:bg-green-700"
+          } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary/50 disabled:opacity-50`}
+        >
+          {isMigrating ? (
+            <>
+              <Pause className="w-4 h-4 mr-2" />
+              Pausar
+            </>
+          ) : (
+            <>
+              <Play className="w-4 h-4 mr-2" />
+              Reanudar
+            </>
+          )}
+        </button>
 
         <button
           onClick={resetMigration}
@@ -340,8 +402,10 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
               </span>
             </div>
             <div>
-              <span className="text-white/70">Último índice procesado:</span>{" "}
-              <span className="font-medium text-white">{migrationState.lastProcessedId}</span>
+              <span className="text-white/70">Índice actual:</span>{" "}
+              <span className="font-medium text-white">
+                {migrationRef.current.currentBatchIndex || migrationState.lastProcessedId}
+              </span>
             </div>
           </div>
         </div>
