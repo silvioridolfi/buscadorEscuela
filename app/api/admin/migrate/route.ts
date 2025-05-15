@@ -145,7 +145,7 @@ async function processEstablishment(establishment: any, contacts: any[]) {
         console.log(`Establecimiento con CUE ${cue} ya existe. Actualizando...`)
 
         // Si ya existe, actualizamos en lugar de insertar
-        const transformedEstablishment = {
+        const transformedEstablishment: any = {
           cue: cue ? Number.parseInt(cue, 10) : null,
           nombre: establishment.ESTABLECIMIENTO || null,
           distrito: establishment.DISTRITO || null,
@@ -192,7 +192,6 @@ async function processEstablishment(establishment: any, contacts: any[]) {
           reclamos_grupo_1_ani: establishment.RECLAMOS_GRUPO_1_ANI || null,
           recurso_primario: establishment.RECURSO_PRIMARIO || null,
           access_id: establishment.ACCESS_ID || null,
-          updated_at: new Date().toISOString(),
         }
 
         // Actualizar el establecimiento existente
@@ -218,7 +217,7 @@ async function processEstablishment(establishment: any, contacts: any[]) {
     }
 
     // Si no existe, creamos un nuevo establecimiento
-    const transformedEstablishment = {
+    const transformedEstablishment: any = {
       id: generateUUID(),
       cue: cue ? Number.parseInt(cue, 10) : null,
       nombre: establishment.ESTABLECIMIENTO || null,
@@ -266,8 +265,6 @@ async function processEstablishment(establishment: any, contacts: any[]) {
       reclamos_grupo_1_ani: establishment.RECLAMOS_GRUPO_1_ANI || null,
       recurso_primario: establishment.RECURSO_PRIMARIO || null,
       access_id: establishment.ACCESS_ID || null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     }
 
     // Insertar el establecimiento en Supabase
@@ -318,7 +315,7 @@ async function processContacts(cue: string | null, contacts: any[]) {
   // Ahora insertamos los nuevos contactos
   for (const contact of relatedContacts) {
     try {
-      const transformedContact = {
+      const transformedContact: any = {
         id: generateUUID(),
         cue: cue ? Number.parseInt(cue, 10) : null,
         nombre: contact.NOMBRE || null,
@@ -326,8 +323,6 @@ async function processContacts(cue: string | null, contacts: any[]) {
         correo: contact.CORREO_INSTITUCIONAL || null,
         telefono: contact.TELEFONO || null,
         cargo: contact.CARGO || null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       }
 
       // Insertar el contacto en Supabase
@@ -398,6 +393,18 @@ export async function POST(request: Request) {
           success: true,
           message: "La migración ya está completa",
           state: migrationState,
+          // Añadir estos campos para evitar undefined
+          processedInBatch: 0,
+          totalProcessed: migrationState.processedRecords || 0,
+          totalRecords: migrationState.totalRecords || 0,
+          progress: 100,
+          nextBatchStart: null,
+          completed: true,
+          results: {
+            exitosos: 0,
+            fallidos: 0,
+            detalles: [],
+          },
         })
       }
 
@@ -436,8 +443,19 @@ export async function POST(request: Request) {
           return NextResponse.json({
             success: true,
             message: "Migración iniciada",
-            totalRecords: establishments.length,
+            totalRecords: establishments.length || 0, // Asegurar que no sea undefined
             batchSize: actualBatchSize,
+            // Añadir estos campos para evitar undefined
+            processedInBatch: 0,
+            totalProcessed: 0,
+            progress: 0,
+            nextBatchStart: 0,
+            completed: false,
+            results: {
+              exitosos: 0,
+              fallidos: 0,
+              detalles: [],
+            },
           })
         } catch (error) {
           return handleError(error)
@@ -463,7 +481,7 @@ export async function POST(request: Request) {
         }
 
         // Determinar el índice de inicio y fin para este lote
-        const start = startIndex || migrationState.lastProcessedId
+        const start = startIndex || migrationState.lastProcessedId || 0
 
         // Verificar si el índice de inicio es mayor o igual al total de registros
         if (start >= establishments.length) {
@@ -535,7 +553,7 @@ export async function POST(request: Request) {
         }
 
         // Actualizar el estado de la migración
-        const newProcessedRecords = migrationState.processedRecords + currentBatch.length
+        const newProcessedRecords = (migrationState.processedRecords || 0) + currentBatch.length
         const isCompleted = newProcessedRecords >= establishments.length
 
         await updateMigrationState({
@@ -588,6 +606,13 @@ export async function POST(request: Request) {
         return NextResponse.json({
           success: true,
           message: "Migración reiniciada correctamente",
+          // Añadir estos campos para evitar undefined
+          processedInBatch: 0,
+          totalProcessed: 0,
+          totalRecords: 0,
+          progress: 0,
+          nextBatchStart: 0,
+          completed: false,
         })
       } catch (error) {
         return handleError(error)

@@ -119,6 +119,27 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             if (attempt > 0) {
               addLog(`Solicitud exitosa después de ${attempt + 1} intentos`)
             }
+
+            // Asegurarse de que los valores no sean undefined
+            if (result.data) {
+              // Asegurar que los campos críticos no sean undefined
+              result.data.totalRecords = result.data.totalRecords || 0
+              result.data.totalProcessed = result.data.totalProcessed || 0
+              result.data.processedInBatch = result.data.processedInBatch || 0
+              result.data.progress = result.data.progress || 0
+
+              if (result.data.state) {
+                result.data.state.totalRecords = result.data.state.totalRecords || 0
+                result.data.state.processedRecords = result.data.state.processedRecords || 0
+                result.data.state.lastProcessedId = result.data.state.lastProcessedId || 0
+              }
+
+              if (result.data.results) {
+                result.data.results.exitosos = result.data.results.exitosos || 0
+                result.data.results.fallidos = result.data.results.fallidos || 0
+              }
+            }
+
             return result.data
           }
 
@@ -201,16 +222,26 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         retryDelay,
       )
 
-      setMigrationState(data.state)
-
-      if (data.state.totalRecords > 0) {
-        const calculatedProgress = Math.round((data.state.processedRecords / data.state.totalRecords) * 100)
-        setProgress(calculatedProgress)
-        addLog(`Progreso actual: ${calculatedProgress}%`)
+      // Asegurarse de que el estado no tenga valores undefined
+      if (data && data.state) {
+        data.state.totalRecords = data.state.totalRecords || 0
+        data.state.processedRecords = data.state.processedRecords || 0
+        data.state.lastProcessedId = data.state.lastProcessedId || 0
+        data.state.completed = !!data.state.completed
       }
 
-      addLog(`Estado de migración: ${data.state.completed ? "Completada" : "Pendiente"}`)
-      addLog(`Registros procesados: ${data.state.processedRecords} de ${data.state.totalRecords}`)
+      setMigrationState(data.state)
+
+      if (data.state && data.state.totalRecords > 0) {
+        const calculatedProgress = Math.round((data.state.processedRecords / data.state.totalRecords) * 100)
+        setProgress(calculatedProgress || 0)
+        addLog(`Progreso actual: ${calculatedProgress || 0}%`)
+      }
+
+      addLog(`Estado de migración: ${data.state && data.state.completed ? "Completada" : "Pendiente"}`)
+      addLog(
+        `Registros procesados: ${data.state ? data.state.processedRecords || 0 : 0} de ${data.state ? data.state.totalRecords || 0 : 0}`,
+      )
 
       return data.state
     } catch (error) {
@@ -266,7 +297,10 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         retryDelay,
       )
 
-      addLog(`Migración iniciada. Total de registros: ${data.totalRecords}`)
+      // Asegurarse de que los datos no tengan valores undefined
+      const totalRecords = data.totalRecords || 0
+
+      addLog(`Migración iniciada. Total de registros: ${totalRecords}`)
       addLog(`Tamaño de lote: ${batchSize} registros`)
 
       // Iniciar el proceso de migración por lotes
@@ -303,7 +337,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
     }
 
     try {
-      addLog(`Procesando lote desde el índice ${startIndex}...`)
+      addLog(`Procesando lote desde el índice ${startIndex || 0}...`)
       setLastBatchError(null)
       setRawResponse(null)
       migrationRef.current.retryAttempts = 0
@@ -319,7 +353,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             authKey: effectiveAuthKey, // Usamos el token efectivo
             action: "continue",
             batchSize,
-            startIndex,
+            startIndex: startIndex || 0,
           }),
         },
         maxRetries,
@@ -328,17 +362,24 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
 
       // Actualizar el estado de la migración solo si seguimos migrando
       if (migrationRef.current.isMigrating) {
-        migrationRef.current.currentBatchIndex = data.nextBatchStart || 0
+        // Asegurarse de que los datos no tengan valores undefined
+        const processedInBatch = data.processedInBatch || 0
+        const totalProcessed = data.totalProcessed || 0
+        const totalRecords = data.totalRecords || 0
+        const progress = data.progress || 0
+        const nextBatchStart = data.nextBatchStart !== undefined ? data.nextBatchStart : null
+        const exitosos = data.results ? data.results.exitosos || 0 : 0
+        const fallidos = data.results ? data.results.fallidos || 0 : 0
 
-        addLog(`Lote procesado. ${data.processedInBatch} registros procesados.`)
-        if (data.results) {
-          addLog(`Exitosos: ${data.results.exitosos}, Fallidos: ${data.results.fallidos}`)
-        }
-        addLog(`Progreso total: ${data.totalProcessed} de ${data.totalRecords} (${data.progress}%)`)
-        setProgress(data.progress)
+        migrationRef.current.currentBatchIndex = nextBatchStart || 0
+
+        addLog(`Lote procesado. ${processedInBatch} registros procesados.`)
+        addLog(`Exitosos: ${exitosos}, Fallidos: ${fallidos}`)
+        addLog(`Progreso total: ${totalProcessed} de ${totalRecords} (${progress}%)`)
+        setProgress(progress)
 
         // Detectar lotes vacíos
-        if (data.processedInBatch === 0) {
+        if (processedInBatch === 0) {
           migrationRef.current.emptyBatchCount++
           setEmptyBatchCount(migrationRef.current.emptyBatchCount)
 
@@ -360,12 +401,12 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         }
 
         // Si hay más lotes por procesar y la migración sigue activa
-        if (!data.completed && data.nextBatchStart !== null && migrationRef.current.isMigrating) {
+        if (!data.completed && nextBatchStart !== null && migrationRef.current.isMigrating) {
           // Esperar un poco para no sobrecargar el servidor
           await new Promise((resolve) => setTimeout(resolve, 2000))
 
           // Procesar el siguiente lote
-          await processBatch(data.nextBatchStart)
+          await processBatch(nextBatchStart)
         } else {
           if (data.completed) {
             addLog("¡Migración completada con éxito!")
@@ -390,7 +431,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
 
         // Avanzamos al siguiente lote
         if (migrationRef.current.isMigrating) {
-          const nextIndex = startIndex + batchSize
+          const nextIndex = (startIndex || 0) + batchSize
           await new Promise((resolve) => setTimeout(resolve, retryDelay))
           await processBatch(nextIndex)
         } else {
@@ -404,7 +445,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             `Reintentando el mismo lote después de ${delayTime}ms (intento ${migrationRef.current.retryAttempts}/${maxRetries})...`,
           )
           await new Promise((resolve) => setTimeout(resolve, delayTime))
-          await processBatch(startIndex)
+          await processBatch(startIndex || 0)
         } else {
           setLockBatchSize(false) // Desbloquear el cambio de tamaño de lote
         }
@@ -595,12 +636,12 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       <div className="mb-4">
         <div className="flex justify-between text-xs text-white/70 mb-1">
           <span>Progreso</span>
-          <span>{progress}%</span>
+          <span>{progress || 0}%</span>
         </div>
         <div className="w-full bg-gray-700 rounded-full h-2.5">
           <div
             className="bg-primary h-2.5 rounded-full transition-all duration-300 ease-in-out"
-            style={{ width: `${progress}%` }}
+            style={{ width: `${progress || 0}%` }}
           ></div>
         </div>
       </div>
@@ -668,14 +709,14 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             <div>
               <span className="text-white/70">Registros procesados:</span>{" "}
               <span className="font-medium text-white">
-                {migrationState.processedRecords} / {migrationState.totalRecords}
+                {migrationState.processedRecords || 0} / {migrationState.totalRecords || 0}
               </span>
             </div>
             <div>
               <span className="text-white/70">Progreso:</span>{" "}
               <span className="font-medium text-white">
                 {migrationState.totalRecords > 0
-                  ? Math.round((migrationState.processedRecords / migrationState.totalRecords) * 100)
+                  ? Math.round(((migrationState.processedRecords || 0) / (migrationState.totalRecords || 1)) * 100)
                   : 0}
                 %
               </span>
@@ -683,7 +724,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             <div>
               <span className="text-white/70">Índice actual:</span>{" "}
               <span className="font-medium text-white">
-                {migrationRef.current.currentBatchIndex || migrationState.lastProcessedId}
+                {migrationRef.current.currentBatchIndex || migrationState.lastProcessedId || 0}
               </span>
             </div>
           </div>
