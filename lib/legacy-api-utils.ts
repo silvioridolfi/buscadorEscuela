@@ -36,7 +36,7 @@ const API_RETRY_COOLDOWN = 30 * 60 * 1000
 /**
  * Fetch with retry and exponential backoff
  */
-async function fetchWithRetry(url: string, retries = 3, delay = 1000) {
+export async function fetchWithRetry(url: string, retries = 3, delay = 1000) {
   let lastError
 
   for (let attempt = 0; attempt < retries; attempt++) {
@@ -173,100 +173,57 @@ async function fetchApiData(isContactsData = false) {
   }
 }
 
-// Función para obtener datos de la hoja de cálculo con reintentos
-export async function getSheetData(sheet: string, retries = 3, delay = 1000): Promise<any[]> {
-  let lastError: Error | null = null
-
-  // Verificar si hay datos en caché
+/**
+ * Get sheet data with caching and API fallback (legacy method)
+ * @deprecated Use Supabase data sources instead
+ */
+export async function getLegacySheetData() {
   const now = Date.now()
-  if (sheet === "establecimientos" && cachedEstablishmentsData && now - cacheTimestamp < CACHE_DURATION) {
-    console.log("Usando datos de establecimientos en caché")
-    return cachedEstablishmentsData
-  }
 
-  if (sheet === "contactos" && cachedContactsData && now - cacheTimestamp < CACHE_DURATION) {
-    console.log("Usando datos de contactos en caché")
-    return cachedContactsData
-  }
-
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      // Si no es el primer intento, esperar antes de reintentar
-      if (attempt > 0) {
-        console.log(`Reintentando obtener datos de ${sheet} (intento ${attempt + 1}/${retries})...`)
-        await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, attempt - 1)))
-      }
-
-      // Usar las URLs originales que sabemos que funcionan
-      let data: any[]
-
-      if (sheet === "establecimientos") {
-        // Intentar obtener datos usando la API original
-        data = await fetchApiData(false)
-      } else if (sheet === "contactos") {
-        // Intentar obtener datos usando la API original
-        data = await fetchApiData(true)
-      } else {
-        // Para otras hojas, construir la URL adecuada
-        const activeApi = getActiveApi()
-        const url = `${activeApi.baseUrl}?sheet=${encodeURIComponent(sheet)}`
-
-        try {
-          const response = await fetchWithRetry(url)
-          if (!response.ok) {
-            throw new Error(`Error al obtener datos de la hoja ${sheet}: ${response.status}`)
-          }
-          data = await response.json()
-        } catch (error) {
-          console.error(`Error al obtener datos de la hoja ${sheet}:`, error)
-          throw error
-        }
-      }
-
-      if (!Array.isArray(data)) {
-        throw new Error(`Respuesta no válida para ${sheet}: no es un array`)
-      }
-
-      console.log(`Datos obtenidos correctamente de ${sheet}: ${data.length} registros`)
-
-      // Actualizar caché solo para las hojas principales
-      if (sheet === "establecimientos") {
-        cachedEstablishmentsData = data
-      } else if (sheet === "contactos") {
-        cachedContactsData = data
-      }
-
-      cacheTimestamp = now
-
-      return data
-    } catch (error) {
-      console.error(`Error al obtener datos de ${sheet} (intento ${attempt + 1}/${retries}):`, error)
-      lastError = error instanceof Error ? error : new Error(String(error))
-
-      // Si es el último intento, propagar el error
-      if (attempt === retries - 1) {
-        // Si tenemos datos en caché, aunque estén expirados, los devolvemos como último recurso
-        if (sheet === "establecimientos" && cachedEstablishmentsData) {
-          console.log("Devolviendo datos de establecimientos en caché expirados como último recurso")
-          return cachedEstablishmentsData
-        }
-
-        if (sheet === "contactos" && cachedContactsData) {
-          console.log("Devolviendo datos de contactos en caché expirados como último recurso")
-          return cachedContactsData
-        }
-
-        throw lastError
-      }
+  // Return cached data if it's still valid
+  if (cachedEstablishmentsData && cachedContactsData && now - cacheTimestamp < CACHE_DURATION) {
+    return {
+      establishmentsData: cachedEstablishmentsData,
+      contactsData: cachedContactsData,
     }
   }
 
-  // Este punto no debería alcanzarse, pero TypeScript lo requiere
-  throw lastError || new Error(`Error desconocido al obtener datos de ${sheet}`)
+  // Fetch new data with fallback logic
+  try {
+    // Fetch establishments data
+    const establishmentsData = await fetchApiData(false)
+
+    // Wait a bit before making the second request to avoid rate limiting
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
+    // Fetch contacts data
+    const contactsData = await fetchApiData(true)
+
+    // Update cache
+    cachedEstablishmentsData = establishmentsData
+    cachedContactsData = contactsData
+    cacheTimestamp = now
+
+    return { establishmentsData, contactsData }
+  } catch (error) {
+    console.error("Error fetching sheet data:", error)
+
+    // If we have cached data, return it even if it's expired
+    if (cachedEstablishmentsData && cachedContactsData) {
+      console.log("Returning expired cached data due to fetch error")
+      return {
+        establishmentsData: cachedEstablishmentsData,
+        contactsData: cachedContactsData,
+      }
+    }
+
+    throw error
+  }
 }
 
 /**
  * Get the legacy APIs status for debugging
+ * @deprecated Use Supabase status check instead
  */
 export function getLegacyApiStatus() {
   return {

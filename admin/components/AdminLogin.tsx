@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Lock, LogIn, AlertTriangle, Info } from "lucide-react"
+import { Lock, LogIn, AlertTriangle } from "lucide-react"
 
 interface AdminLoginProps {
   onLogin: (password: string) => Promise<boolean>
@@ -13,37 +13,16 @@ export default function AdminLogin({ onLogin }: AdminLoginProps) {
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [debugInfo, setDebugInfo] = useState<any>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    setDebugInfo(null)
 
     try {
-      // Modificamos para capturar la respuesta completa
-      const response = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ password }),
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        // Guardar el token en el almacenamiento local
-        localStorage.setItem("adminToken", data.token)
-        // Llamar a onLogin para actualizar el estado en el componente padre
-        await onLogin(password)
-      } else {
-        setError(data.error || "Credenciales inválidas. Por favor, intente nuevamente.")
-        if (data.debug) {
-          setDebugInfo(data.debug)
-          console.log("Información de depuración:", data.debug)
-        }
+      const success = await onLogin(password)
+      if (!success) {
+        setError("Credenciales inválidas. Por favor, intente nuevamente.")
       }
     } catch (err) {
       setError("Error al iniciar sesión. Por favor, intente nuevamente.")
@@ -85,24 +64,6 @@ export default function AdminLogin({ onLogin }: AdminLoginProps) {
           </div>
         )}
 
-        {debugInfo && (
-          <div className="p-3 bg-blue-900/50 border border-blue-500/30 rounded-xl text-sm text-blue-200">
-            <div className="flex items-start">
-              <Info className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold">Información de depuración:</p>
-                <ul className="list-disc list-inside mt-1">
-                  {Object.entries(debugInfo).map(([key, value]) => (
-                    <li key={key}>
-                      {key}: {String(value)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-
         <button
           type="submit"
           disabled={loading}
@@ -133,10 +94,6 @@ export default function AdminLogin({ onLogin }: AdminLoginProps) {
           )}
         </button>
       </form>
-
-      <div className="mt-4 text-xs text-white/60">
-        <p>Nota: La contraseña de administrador es el valor de la variable de entorno MIGRATION_AUTH_KEY.</p>
-      </div>
     </div>
   )
 }

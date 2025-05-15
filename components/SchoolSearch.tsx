@@ -3,10 +3,10 @@
 import type React from "react"
 import { useState, useCallback, useRef, useEffect } from "react"
 import SchoolCard from "./SchoolCard"
-import { Search, X, RefreshCw, School, AlertCircle, Loader2, Info } from "lucide-react"
+import { Search, X, RefreshCw, School, AlertCircle, Loader2 } from "lucide-react"
 
 // Add a version number to help track deployments
-const APP_VERSION = "2.0.5" // Diagnóstico y corrección de búsqueda
+const APP_VERSION = "2.0.3" // Optimización y corrección de funcionalidades
 // Generar versión automática basada en la fecha (formato: AAAA.MM.DD)
 const today = new Date()
 const AUTO_VERSION = `${today.getFullYear()}.${(today.getMonth() + 1).toString().padStart(2, "0")}.${today.getDate().toString().padStart(2, "0")}`
@@ -88,44 +88,8 @@ export default function SchoolSearch() {
   const [forceRefreshKey, setForceRefreshKey] = useState(Date.now())
   // Nuevo estado para rastrear si se ha realizado una búsqueda activa
   const [hasSearched, setHasSearched] = useState(false)
-  // Estado para rastrear si estamos usando la API de fallback
-  const [usingFallbackApi, setUsingFallbackApi] = useState(false)
-  // Estado para información de diagnóstico
-  const [diagnosticInfo, setDiagnosticInfo] = useState<any>(null)
-  const [showDiagnostic, setShowDiagnostic] = useState(false)
 
   const searchInputRef = useRef<HTMLInputElement>(null)
-
-  // Verificar la conexión a Supabase al cargar
-  useEffect(() => {
-    const checkSupabaseConnection = async () => {
-      try {
-        const response = await fetch("/api/debug/supabase-test", {
-          cache: "no-store",
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        })
-
-        const data = await response.json()
-        setDiagnosticInfo(data)
-
-        if (!data.success) {
-          console.error("Error en la conexión a Supabase:", data.error)
-          setError("Error en la conexión a la base de datos. Por favor, contacte al administrador.")
-        } else {
-          console.log("Conexión a Supabase exitosa. Registros disponibles:", data.count)
-        }
-      } catch (error) {
-        console.error("Error al verificar la conexión a Supabase:", error)
-        setDiagnosticInfo({ error: error.message })
-      }
-    }
-
-    checkSupabaseConnection()
-  }, [])
 
   // Force a refresh of the component on mount to clear any stale data
   useEffect(() => {
@@ -462,40 +426,6 @@ export default function SchoolSearch() {
     }
   }, [results, fetchAllSchoolsForPredioCheck])
 
-  // Función para intentar con la API de fallback si la principal falla
-  const tryFallbackApi = useCallback(async (searchQuery: string) => {
-    console.log("Intentando con API de fallback...")
-    setUsingFallbackApi(true)
-
-    try {
-      // Usar la API original como fallback
-      const params = new URLSearchParams()
-      if (searchQuery) params.append("query", searchQuery)
-
-      const url = getTimestampedUrl(`/api/search?${params.toString()}`)
-      const response = await fetch(url, {
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Ocurrió un error al buscar los datos (fallback)")
-      }
-
-      const data = await response.json()
-      console.log(`API fallback: Recuperadas ${data?.length || 0} escuelas.`)
-      return data
-    } catch (error) {
-      console.error("Error en API fallback:", error)
-      throw error
-    }
-  }, [])
-
   const fetchResults = useCallback(
     async (searchQuery?: string) => {
       const queryToUse = searchQuery !== undefined ? searchQuery : query
@@ -507,19 +437,14 @@ export default function SchoolSearch() {
 
       setLoading(true)
       setError(null)
-      setUsingFallbackApi(false)
 
       try {
         // Build query params
         const params = new URLSearchParams()
         if (queryToUse) params.append("query", queryToUse)
 
-        // Intentar primero con la API de Supabase
-        console.log(`Cliente: Buscando "${queryToUse}" usando API de Supabase...`)
+        // Cambiar la URL para usar la API de Supabase
         const url = getTimestampedUrl(`/api/search/supabase?${params.toString()}`)
-
-        console.log("URL de búsqueda:", url)
-
         const response = await fetch(url, {
           cache: "no-store",
           headers: {
@@ -529,86 +454,23 @@ export default function SchoolSearch() {
           },
         })
 
-        // Guardar la respuesta para diagnóstico
-        const responseText = await response.text()
-        let data
-
-        try {
-          data = JSON.parse(responseText)
-        } catch (e) {
-          console.error("Error al parsear la respuesta JSON:", e)
-          console.log("Respuesta recibida:", responseText)
-          setDiagnosticInfo({
-            ...diagnosticInfo,
-            lastResponse: responseText,
-            parseError: e.message,
-          })
-          throw new Error("Error al parsear la respuesta del servidor")
-        }
-
-        // Actualizar información de diagnóstico
-        setDiagnosticInfo({
-          ...diagnosticInfo,
-          lastQuery: queryToUse,
-          lastResponse: data,
-          responseStatus: response.status,
-          responseOk: response.ok,
-        })
-
         if (!response.ok) {
-          console.error("Error en API de Supabase:", data)
-
-          // Si la API de Supabase falla, intentar con la API de fallback
-          console.log("Intentando con API de fallback...")
-          const fallbackResults = await tryFallbackApi(queryToUse)
-          setResults(fallbackResults)
-        } else {
-          console.log(`API Supabase: Recuperadas ${data?.length || 0} escuelas.`)
-
-          // Si no hay resultados con Supabase, intentar con la API de fallback
-          if (!data || data.length === 0) {
-            console.log("No hay resultados con Supabase, intentando con API de fallback...")
-            try {
-              const fallbackResults = await tryFallbackApi(queryToUse)
-              if (fallbackResults && fallbackResults.length > 0) {
-                setResults(fallbackResults)
-              } else {
-                setResults([])
-              }
-            } catch (fallbackError) {
-              console.error("Error en API fallback:", fallbackError)
-              setResults([])
-            }
-          } else {
-            setResults(data)
-          }
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Ocurrió un error al buscar los datos")
         }
 
+        const data = await response.json()
+        setResults(data)
         // Marcar que se ha realizado una búsqueda
         setHasSearched(true)
       } catch (error) {
         console.error("Error en fetchResults:", error)
-        setDiagnosticInfo({
-          ...diagnosticInfo,
-          lastError: error.message,
-          errorStack: error.stack,
-        })
-
-        // Intentar con la API de fallback si hay un error
-        try {
-          console.log("Error en API principal, intentando con API de fallback...")
-          const fallbackResults = await tryFallbackApi(queryToUse)
-          setResults(fallbackResults)
-        } catch (fallbackError) {
-          console.error("Error en API fallback:", fallbackError)
-          setError("Ocurrió un error inesperado en ambas APIs. Por favor, intente más tarde.")
-          setResults([])
-        }
+        setError(error.message || "Ocurrió un error inesperado")
       } finally {
         setLoading(false)
       }
     },
-    [query, tryFallbackApi, diagnosticInfo],
+    [query],
   )
 
   // Function to search by CUE
@@ -635,7 +497,6 @@ export default function SchoolSearch() {
     setSharedPredios({})
     // Reiniciar el estado de búsqueda
     setHasSearched(false)
-    setUsingFallbackApi(false)
 
     // Usar un pequeño retraso para asegurar que el DOM se actualice antes de enfocar
     setTimeout(() => {
@@ -649,11 +510,6 @@ export default function SchoolSearch() {
   // Función para manejar el clic en el botón X
   const handleClearButtonClick = () => {
     handleClear()
-  }
-
-  // Función para mostrar/ocultar información de diagnóstico
-  const toggleDiagnostic = () => {
-    setShowDiagnostic(!showDiagnostic)
   }
 
   return (
@@ -712,14 +568,6 @@ export default function SchoolSearch() {
               >
                 <RefreshCw className="w-5 h-5" />
               </button>
-              <button
-                type="button"
-                onClick={toggleDiagnostic}
-                title="Diagnóstico"
-                className="px-4 py-3 rounded-xl bg-gray-500 hover:bg-gray-600 text-white font-medium transition-colors shadow-lg flex items-center justify-center"
-              >
-                <Info className="w-5 h-5" />
-              </button>
             </div>
           </form>
 
@@ -733,29 +581,6 @@ export default function SchoolSearch() {
                   <p className="text-sm">{error}</p>
                 </div>
               </div>
-            </div>
-          )}
-
-          {usingFallbackApi && (
-            <div className="bg-yellow-500/20 backdrop-blur-sm border-l-4 border-yellow-500 text-white p-4 rounded-lg mt-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <AlertCircle className="h-5 w-5 text-yellow-300" />
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm">
-                    Usando sistema de búsqueda alternativo. Algunos resultados podrían no ser precisos.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Información de diagnóstico */}
-          {showDiagnostic && diagnosticInfo && (
-            <div className="mt-4 bg-gray-800/80 backdrop-blur-sm border border-gray-700 rounded-lg p-4 text-white text-xs overflow-auto max-h-60">
-              <h3 className="font-bold mb-2">Información de diagnóstico:</h3>
-              <pre className="whitespace-pre-wrap">{JSON.stringify(diagnosticInfo, null, 2)}</pre>
             </div>
           )}
         </div>
