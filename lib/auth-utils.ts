@@ -12,7 +12,6 @@ export function verifyAdminAuth(token: string | null): boolean {
 
   try {
     // Verificar directamente si el token coincide con la clave secreta
-    // Esto es más simple y directo que usar HMAC
     return token === secretKey
   } catch (error) {
     console.error("Error al verificar la autenticación:", error)
