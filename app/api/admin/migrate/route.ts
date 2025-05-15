@@ -6,6 +6,7 @@ import { verifyAdminAuth } from "@/lib/auth-utils"
 export const dynamic = "force-dynamic"
 export const fetchCache = "force-no-store"
 export const revalidate = 0
+export const maxDuration = 60 // Máximo permitido: 60 segundos
 
 // Función para manejar errores y siempre devolver JSON válido
 function handleError(error: any, status = 500) {
@@ -125,6 +126,125 @@ async function ensureTablesExist() {
   }
 }
 
+// Función para procesar un establecimiento y sus contactos
+async function processEstablishment(establishment: any, contacts: any[]) {
+  try {
+    // Normalizar el CUE para buscar contactos relacionados
+    const cue = establishment.CUE ? establishment.CUE.toString().trim() : null
+
+    // Buscar contactos relacionados con este CUE
+    const relatedContacts = contacts.filter((contact) => contact.CUE && contact.CUE.toString().trim() === cue)
+
+    // Transformar el establecimiento al formato de Supabase
+    const transformedEstablishment = {
+      id: generateUUID(),
+      cue: cue ? Number.parseInt(cue, 10) : null,
+      nombre: establishment.ESTABLECIMIENTO || null,
+      distrito: establishment.DISTRITO || null,
+      ciudad: establishment.CIUDAD || null,
+      direccion: establishment.DIRECCION || null,
+      lat: establishment.LAT ? Number.parseFloat(establishment.LAT) : null,
+      lon: establishment.LON ? Number.parseFloat(establishment.LON) : null,
+      predio: establishment.PREDIO || null,
+      fed_a_cargo: establishment.FED_A_CARGO || null,
+      plan_enlace: establishment.PLAN_ENLACE || null,
+      subplan_enlace: establishment.SUBPLAN_ENLACE || null,
+      fecha_inicio_conectividad: establishment.FECHA_INICIO_CONECTIVIDAD || null,
+      proveedor_internet_pnce: establishment.PROVEEDOR_INTERNET_PNCE || null,
+      fecha_instalacion_pnce: establishment.FECHA_INSTALACION_PNCE || null,
+      pnce_tipo_mejora: establishment.PNCE_TIPO_MEJORA || null,
+      pnce_fecha_mejora: establishment.PNCE_FECHA_MEJORA || null,
+      pnce_estado: establishment.PNCE_ESTADO || null,
+      pba_grupo_1_proveedor_internet: establishment.PBA_GRUPO_1_PROVEEDOR_INTERNET || null,
+      pba_grupo_1_fecha_instalacion: establishment.PBA_GRUPO_1_FECHA_INSTALACION || null,
+      pba_grupo_1_estado: establishment.PBA_GRUPO_1_ESTADO || null,
+      pba_2019_proveedor_internet: establishment.PBA_2019_PROVEEDOR_INTERNET || null,
+      pba_2019_fecha_instalacion: establishment.PBA_2019_FECHA_INSTALACION || null,
+      pba_2019_estado: establishment.PBA_2019_ESTADO || null,
+      pba_grupo_2_a_proveedor_internet: establishment.PBA_GRUPO_2_A_PROVEEDOR_INTERNET || null,
+      pba_grupo_2_a_fecha_instalacion: establishment.PBA_GRUPO_2_A_FECHA_INSTALACION || null,
+      pba_grupo_2_a_tipo_mejora: establishment.PBA_GRUPO_2_A_TIPO_MEJORA || null,
+      pba_grupo_2_a_fecha_mejora: establishment.PBA_GRUPO_2_A_FECHA_MEJORA || null,
+      pba_grupo_2_a_estado: establishment.PBA_GRUPO_2_A_ESTADO || null,
+      plan_piso_tecnologico: establishment.PLAN_PISO_TECNOLOGICO || null,
+      proveedor_piso_tecnologico_cue: establishment.PROVEEDOR_PISO_TECNOLOGICO_CUE || null,
+      fecha_terminado_piso_tecnologico_cue: establishment.FECHA_TERMINADO_PISO_TECNOLOGICO_CUE || null,
+      tipo_mejora: establishment.TIPO_MEJORA || null,
+      fecha_mejora: establishment.FECHA_MEJORA || null,
+      tipo_piso_instalado: establishment.TIPO_PISO_INSTALADO || null,
+      tipo: establishment.TIPO || null,
+      observaciones: establishment.OBSERVACIONES || null,
+      tipo_establecimiento: establishment.TIPO_ESTABLECIMIENTO || null,
+      listado_conexion_internet: establishment.LISTADO_CONEXION_INTERNET || null,
+      estado_instalacion_pba: establishment.ESTADO_INSTALACION_PBA || null,
+      proveedor_asignado_pba: establishment.PROVEEDOR_ASIGNADO_PBA || null,
+      mb: establishment.MB || null,
+      ambito: establishment.AMBITO || null,
+      cue_anterior: establishment.CUE_ANTERIOR || null,
+      reclamos_grupo_1_ani: establishment.RECLAMOS_GRUPO_1_ANI || null,
+      recurso_primario: establishment.RECURSO_PRIMARIO || null,
+      access_id: establishment.ACCESS_ID || null,
+    }
+
+    // Insertar el establecimiento en Supabase
+    const { data: insertedEstablishment, error: establishmentError } = await supabaseAdmin
+      .from("establecimientos")
+      .upsert(transformedEstablishment)
+      .select()
+
+    if (establishmentError) {
+      throw new Error(`Error al insertar establecimiento ${cue}: ${establishmentError.message}`)
+    }
+
+    // Procesar contactos relacionados
+    let contactsSuccess = 0
+    let contactsFail = 0
+
+    for (const contact of relatedContacts) {
+      try {
+        const transformedContact = {
+          id: generateUUID(),
+          cue: cue ? Number.parseInt(cue, 10) : null,
+          nombre: contact.NOMBRE || null,
+          apellido: contact.APELLIDO || null,
+          correo: contact.CORREO_INSTITUCIONAL || null,
+          telefono: contact.TELEFONO || null,
+          cargo: contact.CARGO || null,
+        }
+
+        // Insertar el contacto en Supabase
+        const { error: contactError } = await supabaseAdmin.from("contactos").upsert(transformedContact)
+
+        if (contactError) {
+          console.error(`Error al insertar contacto para CUE ${cue}:`, contactError.message)
+          contactsFail++
+        } else {
+          contactsSuccess++
+        }
+      } catch (contactError) {
+        console.error(`Error inesperado al procesar contacto para CUE ${cue}:`, contactError)
+        contactsFail++
+      }
+    }
+
+    return {
+      success: true,
+      cue,
+      contactos: {
+        total: relatedContacts.length,
+        exito: contactsSuccess,
+        fallidos: contactsFail,
+      },
+    }
+  } catch (error) {
+    console.error(`Error al procesar establecimiento:`, error)
+    return {
+      success: false,
+      error: error.message || "Error inesperado",
+    }
+  }
+}
+
 export async function POST(request: Request) {
   try {
     // Obtener datos de la solicitud
@@ -135,7 +255,7 @@ export async function POST(request: Request) {
       return handleError(new Error("Error al parsear el cuerpo de la solicitud: " + parseError.message), 400)
     }
 
-    const { authKey, action, batchSize = 25, startIndex = 0 } = requestData
+    const { authKey, action, batchSize = 10, startIndex = 0 } = requestData
 
     // Verificar autenticación usando la función de auth-utils
     const isAuthenticated = verifyAdminAuth(authKey)
@@ -244,129 +364,18 @@ export async function POST(request: Request) {
         let successCount = 0
         let failCount = 0
 
+        // Procesar los establecimientos uno por uno para evitar sobrecargar la base de datos
         for (const establishment of currentBatch) {
           try {
-            // Normalizar el CUE para buscar contactos relacionados
-            const cue = establishment.CUE ? establishment.CUE.toString().trim() : null
+            const result = await processEstablishment(establishment, contacts)
 
-            // Buscar contactos relacionados con este CUE
-            const relatedContacts = contacts.filter((contact) => contact.CUE && contact.CUE.toString().trim() === cue)
-
-            // Transformar el establecimiento al formato de Supabase
-            const transformedEstablishment = {
-              id: generateUUID(),
-              cue: cue ? Number.parseInt(cue, 10) : null,
-              nombre: establishment.ESTABLECIMIENTO || null,
-              distrito: establishment.DISTRITO || null,
-              ciudad: establishment.CIUDAD || null,
-              direccion: establishment.DIRECCION || null,
-              lat: establishment.LAT ? Number.parseFloat(establishment.LAT) : null,
-              lon: establishment.LON ? Number.parseFloat(establishment.LON) : null,
-              predio: establishment.PREDIO || null,
-              fed_a_cargo: establishment.FED_A_CARGO || null,
-              plan_enlace: establishment.PLAN_ENLACE || null,
-              subplan_enlace: establishment.SUBPLAN_ENLACE || null,
-              fecha_inicio_conectividad: establishment.FECHA_INICIO_CONECTIVIDAD || null,
-              proveedor_internet_pnce: establishment.PROVEEDOR_INTERNET_PNCE || null,
-              fecha_instalacion_pnce: establishment.FECHA_INSTALACION_PNCE || null,
-              pnce_tipo_mejora: establishment.PNCE_TIPO_MEJORA || null,
-              pnce_fecha_mejora: establishment.PNCE_FECHA_MEJORA || null,
-              pnce_estado: establishment.PNCE_ESTADO || null,
-              pba_grupo_1_proveedor_internet: establishment.PBA_GRUPO_1_PROVEEDOR_INTERNET || null,
-              pba_grupo_1_fecha_instalacion: establishment.PBA_GRUPO_1_FECHA_INSTALACION || null,
-              pba_grupo_1_estado: establishment.PBA_GRUPO_1_ESTADO || null,
-              pba_2019_proveedor_internet: establishment.PBA_2019_PROVEEDOR_INTERNET || null,
-              pba_2019_fecha_instalacion: establishment.PBA_2019_FECHA_INSTALACION || null,
-              pba_2019_estado: establishment.PBA_2019_ESTADO || null,
-              pba_grupo_2_a_proveedor_internet: establishment.PBA_GRUPO_2_A_PROVEEDOR_INTERNET || null,
-              pba_grupo_2_a_fecha_instalacion: establishment.PBA_GRUPO_2_A_FECHA_INSTALACION || null,
-              pba_grupo_2_a_tipo_mejora: establishment.PBA_GRUPO_2_A_TIPO_MEJORA || null,
-              pba_grupo_2_a_fecha_mejora: establishment.PBA_GRUPO_2_A_FECHA_MEJORA || null,
-              pba_grupo_2_a_estado: establishment.PBA_GRUPO_2_A_ESTADO || null,
-              plan_piso_tecnologico: establishment.PLAN_PISO_TECNOLOGICO || null,
-              proveedor_piso_tecnologico_cue: establishment.PROVEEDOR_PISO_TECNOLOGICO_CUE || null,
-              fecha_terminado_piso_tecnologico_cue: establishment.FECHA_TERMINADO_PISO_TECNOLOGICO_CUE || null,
-              tipo_mejora: establishment.TIPO_MEJORA || null,
-              fecha_mejora: establishment.FECHA_MEJORA || null,
-              tipo_piso_instalado: establishment.TIPO_PISO_INSTALADO || null,
-              tipo: establishment.TIPO || null,
-              observaciones: establishment.OBSERVACIONES || null,
-              tipo_establecimiento: establishment.TIPO_ESTABLECIMIENTO || null,
-              listado_conexion_internet: establishment.LISTADO_CONEXION_INTERNET || null,
-              estado_instalacion_pba: establishment.ESTADO_INSTALACION_PBA || null,
-              proveedor_asignado_pba: establishment.PROVEEDOR_ASIGNADO_PBA || null,
-              mb: establishment.MB || null,
-              ambito: establishment.AMBITO || null,
-              cue_anterior: establishment.CUE_ANTERIOR || null,
-              reclamos_grupo_1_ani: establishment.RECLAMOS_GRUPO_1_ANI || null,
-              recurso_primario: establishment.RECURSO_PRIMARIO || null,
-              access_id: establishment.ACCESS_ID || null,
-            }
-
-            // Insertar el establecimiento en Supabase
-            const { data: insertedEstablishment, error: establishmentError } = await supabaseAdmin
-              .from("establecimientos")
-              .upsert(transformedEstablishment)
-              .select()
-
-            if (establishmentError) {
-              console.error(`Error al insertar establecimiento ${cue}:`, establishmentError.message)
+            if (result.success) {
+              successCount++
+            } else {
               failCount++
-              results.push({
-                cue,
-                success: false,
-                error: establishmentError.message,
-              })
-              continue
             }
 
-            // Procesar contactos relacionados
-            let contactsSuccess = 0
-            let contactsFail = 0
-
-            for (const contact of relatedContacts) {
-              try {
-                const transformedContact = {
-                  id: generateUUID(),
-                  cue: cue ? Number.parseInt(cue, 10) : null,
-                  nombre: contact.NOMBRE || null,
-                  apellido: contact.APELLIDO || null,
-                  correo: contact.CORREO_INSTITUCIONAL || null,
-                  telefono: contact.TELEFONO || null,
-                  cargo: contact.CARGO || null,
-                }
-
-                // Insertar el contacto en Supabase
-                const { error: contactError } = await supabaseAdmin.from("contactos").upsert(transformedContact)
-
-                if (contactError) {
-                  console.error(`Error al insertar contacto para CUE ${cue}:`, contactError.message)
-                  contactsFail++
-                  results.push({
-                    cue,
-                    contacto: `${contact.NOMBRE} ${contact.APELLIDO}`,
-                    success: false,
-                    error: contactError.message,
-                  })
-                } else {
-                  contactsSuccess++
-                }
-              } catch (contactError) {
-                console.error(`Error inesperado al procesar contacto para CUE ${cue}:`, contactError)
-                contactsFail++
-              }
-            }
-
-            successCount++
-            results.push({
-              cue,
-              success: true,
-              contactos: {
-                total: relatedContacts.length,
-                exito: contactsSuccess,
-                fallidos: contactsFail,
-              },
-            })
+            results.push(result)
           } catch (itemError) {
             console.error(`Error inesperado al procesar establecimiento:`, itemError)
             failCount++
@@ -376,6 +385,9 @@ export async function POST(request: Request) {
               error: itemError.message || "Error inesperado",
             })
           }
+
+          // Pequeña pausa entre cada establecimiento para no sobrecargar la API
+          await new Promise((resolve) => setTimeout(resolve, 100))
         }
 
         // Actualizar el estado de la migración

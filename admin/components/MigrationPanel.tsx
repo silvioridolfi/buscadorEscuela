@@ -9,16 +9,20 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
   const [logs, setLogs] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isMigrating, setIsMigrating] = useState(false)
-  const [batchSize, setBatchSize] = useState(25) // Reducido a 25 para mayor estabilidad
+  const [batchSize, setBatchSize] = useState(10) // Reducido a 10 para mayor estabilidad
   const [progress, setProgress] = useState(0)
   const [lastBatchError, setLastBatchError] = useState<string | null>(null)
   const [rawResponse, setRawResponse] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
+  const [maxRetries, setMaxRetries] = useState(3)
+  const [retryDelay, setRetryDelay] = useState(2000)
 
   // Ref para mantener el estado de migración entre renderizados
   const migrationRef = useRef({
     isMigrating: false,
     currentBatchIndex: 0,
     hasError: false,
+    retryAttempts: 0,
   })
 
   // Función para agregar un log con timestamp
@@ -44,6 +48,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         // Si no es JSON válido, devolvemos un objeto de error
         console.error("Error al parsear JSON:", parseError)
         addLog(`Error al parsear respuesta: ${parseError.message}`)
+        addLog(`Respuesta en bruto (primeros 100 caracteres): ${text.substring(0, 100)}...`)
         return {
           ok: false,
           data: {
@@ -64,6 +69,58 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
     }
   }
 
+  // Función para realizar una solicitud con reintentos
+  const fetchWithRetry = async (url: string, options: RequestInit, maxAttempts = 3, baseDelay = 2000) => {
+    let lastError: Error | null = null
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        // Si no es el primer intento, esperar antes de reintentar
+        if (attempt > 0) {
+          const delayTime = baseDelay * Math.pow(2, attempt - 1)
+          addLog(`Reintentando solicitud (intento ${attempt + 1}/${maxAttempts}) después de ${delayTime}ms...`)
+          await new Promise((resolve) => setTimeout(resolve, delayTime))
+        }
+
+        // Realizar la solicitud con un timeout
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 segundos de timeout
+
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+        })
+
+        clearTimeout(timeoutId)
+
+        // Procesar la respuesta
+        const result = await safelyHandleResponse(response)
+
+        // Si la respuesta es exitosa, devolver el resultado
+        if (result.ok) {
+          if (attempt > 0) {
+            addLog(`Solicitud exitosa después de ${attempt + 1} intentos`)
+          }
+          return result.data
+        }
+
+        // Si la respuesta no es exitosa pero es un JSON válido, lanzar un error con el mensaje
+        throw new Error(result.data.error || "Error en la respuesta del servidor")
+      } catch (error) {
+        console.error(`Error en solicitud (intento ${attempt + 1}/${maxAttempts}):`, error)
+        lastError = error instanceof Error ? error : new Error(String(error))
+
+        // Si es el último intento, propagar el error
+        if (attempt === maxAttempts - 1) {
+          throw lastError
+        }
+      }
+    }
+
+    // Este punto no debería alcanzarse, pero TypeScript lo requiere
+    throw lastError || new Error("Error desconocido en la solicitud")
+  }
+
   // Función para obtener el estado actual de la migración
   const getMigrationState = async () => {
     try {
@@ -71,22 +128,21 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       setError(null)
       addLog("Obteniendo estado de migración...")
 
-      const response = await fetch("/api/admin/migrate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const data = await fetchWithRetry(
+        "/api/admin/migrate",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            authKey,
+            action: "getState",
+          }),
         },
-        body: JSON.stringify({
-          authKey,
-          action: "getState",
-        }),
-      })
-
-      const { ok, data } = await safelyHandleResponse(response)
-
-      if (!ok) {
-        throw new Error(data.error || "Error al obtener el estado de la migración")
-      }
+        maxRetries,
+        retryDelay,
+      )
 
       setMigrationState(data.state)
 
@@ -117,25 +173,25 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       setError(null)
       setLastBatchError(null)
       setRawResponse(null)
+      setRetryCount(0)
       addLog("Iniciando migración completa de la base de datos...")
 
-      const response = await fetch("/api/admin/migrate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const data = await fetchWithRetry(
+        "/api/admin/migrate",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            authKey,
+            action: "start",
+            batchSize,
+          }),
         },
-        body: JSON.stringify({
-          authKey,
-          action: "start",
-          batchSize,
-        }),
-      })
-
-      const { ok, data } = await safelyHandleResponse(response)
-
-      if (!ok) {
-        throw new Error(data.error || "Error al iniciar la migración")
-      }
+        maxRetries,
+        retryDelay,
+      )
 
       addLog(`Migración iniciada. Total de registros: ${data.totalRecords}`)
       addLog(`Tamaño de lote: ${batchSize} registros`)
@@ -145,6 +201,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         isMigrating: true,
         currentBatchIndex: 0,
         hasError: false,
+        retryAttempts: 0,
       }
 
       setIsMigrating(true)
@@ -172,25 +229,25 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       addLog(`Procesando lote desde el índice ${startIndex}...`)
       setLastBatchError(null)
       setRawResponse(null)
+      migrationRef.current.retryAttempts = 0
 
-      const response = await fetch("/api/admin/migrate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const data = await fetchWithRetry(
+        "/api/admin/migrate",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            authKey,
+            action: "continue",
+            batchSize,
+            startIndex,
+          }),
         },
-        body: JSON.stringify({
-          authKey,
-          action: "continue",
-          batchSize,
-          startIndex,
-        }),
-      })
-
-      const { ok, data } = await safelyHandleResponse(response)
-
-      if (!ok) {
-        throw new Error(data.error || "Error al procesar lote")
-      }
+        maxRetries,
+        retryDelay,
+      )
 
       // Actualizar el estado de la migración solo si seguimos migrando
       if (migrationRef.current.isMigrating) {
@@ -206,7 +263,7 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
         // Si hay más lotes por procesar y la migración sigue activa
         if (!data.completed && data.nextBatchStart !== null && migrationRef.current.isMigrating) {
           // Esperar un poco para no sobrecargar el servidor
-          await new Promise((resolve) => setTimeout(resolve, 1000))
+          await new Promise((resolve) => setTimeout(resolve, 2000))
 
           // Procesar el siguiente lote
           await processBatch(data.nextBatchStart)
@@ -223,15 +280,30 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       setLastBatchError(error.message || "Error al procesar lote")
       addLog(`Error en lote: ${error.message}`)
 
-      // No paramos la migración por un error en un lote, intentamos continuar
-      // con el siguiente lote después de una pausa
-      if (migrationRef.current.isMigrating) {
-        addLog("Intentando continuar con el siguiente lote después de 3 segundos...")
-        await new Promise((resolve) => setTimeout(resolve, 3000))
+      // Incrementar contador de reintentos
+      migrationRef.current.retryAttempts += 1
+      setRetryCount(migrationRef.current.retryAttempts)
+
+      // Si hemos excedido el número máximo de reintentos para este lote, avanzamos al siguiente
+      if (migrationRef.current.retryAttempts >= maxRetries) {
+        addLog(`Máximo de reintentos alcanzado (${maxRetries}). Avanzando al siguiente lote...`)
 
         // Avanzamos al siguiente lote
-        const nextIndex = startIndex + batchSize
-        await processBatch(nextIndex)
+        if (migrationRef.current.isMigrating) {
+          const nextIndex = startIndex + batchSize
+          await new Promise((resolve) => setTimeout(resolve, retryDelay))
+          await processBatch(nextIndex)
+        }
+      } else {
+        // Reintentamos el mismo lote después de una pausa
+        if (migrationRef.current.isMigrating) {
+          const delayTime = retryDelay * Math.pow(2, migrationRef.current.retryAttempts - 1)
+          addLog(
+            `Reintentando el mismo lote después de ${delayTime}ms (intento ${migrationRef.current.retryAttempts}/${maxRetries})...`,
+          )
+          await new Promise((resolve) => setTimeout(resolve, delayTime))
+          await processBatch(startIndex)
+        }
       }
     }
   }
@@ -248,22 +320,21 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
       setRawResponse(null)
       addLog("Reiniciando migración...")
 
-      const response = await fetch("/api/admin/migrate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const data = await fetchWithRetry(
+        "/api/admin/migrate",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            authKey,
+            action: "reset",
+          }),
         },
-        body: JSON.stringify({
-          authKey,
-          action: "reset",
-        }),
-      })
-
-      const { ok, data } = await safelyHandleResponse(response)
-
-      if (!ok) {
-        throw new Error(data.error || "Error al reiniciar la migración")
-      }
+        maxRetries,
+        retryDelay,
+      )
 
       addLog("Migración reiniciada correctamente")
       await getMigrationState()
@@ -331,29 +402,53 @@ export default function MigrationPanel({ authKey }: { authKey: string }) {
             </div>
             <div className="ml-3">
               <p className="text-sm">Error en el último lote: {lastBatchError}</p>
-              <p className="text-sm mt-1">La migración intentará continuar con el siguiente lote.</p>
+              <p className="text-sm mt-1">
+                Reintentos: {retryCount}/{maxRetries}.{" "}
+                {retryCount >= maxRetries ? "Avanzando al siguiente lote." : "Reintentando..."}
+              </p>
             </div>
           </div>
         </div>
       )}
 
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-white mb-1">Tamaño de lote</label>
-        <div className="flex items-center">
-          <input
-            type="number"
-            value={batchSize}
-            onChange={(e) => setBatchSize(Number.parseInt(e.target.value) || 25)}
-            min="5"
-            max="100"
-            className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-white/30 rounded-md bg-white/10 text-white"
-            disabled={isMigrating || loading}
-          />
-          <span className="ml-2 text-sm text-white/70">registros</span>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="block text-sm font-medium text-white mb-1">Tamaño de lote</label>
+          <div className="flex items-center">
+            <input
+              type="number"
+              value={batchSize}
+              onChange={(e) => setBatchSize(Number.parseInt(e.target.value) || 10)}
+              min="5"
+              max="50"
+              className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-white/30 rounded-md bg-white/10 text-white"
+              disabled={isMigrating || loading}
+            />
+            <span className="ml-2 text-sm text-white/70">registros</span>
+          </div>
+          <p className="mt-1 text-xs text-white/70">
+            Número de registros a procesar en cada lote. Valores más pequeños son más seguros.
+          </p>
         </div>
-        <p className="mt-1 text-xs text-white/70">
-          Número de registros a procesar en cada lote. Valores más pequeños son más seguros pero más lentos.
-        </p>
+
+        <div>
+          <label className="block text-sm font-medium text-white mb-1">Reintentos por lote</label>
+          <div className="flex items-center">
+            <input
+              type="number"
+              value={maxRetries}
+              onChange={(e) => setMaxRetries(Number.parseInt(e.target.value) || 3)}
+              min="1"
+              max="5"
+              className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-white/30 rounded-md bg-white/10 text-white"
+              disabled={isMigrating || loading}
+            />
+            <span className="ml-2 text-sm text-white/70">intentos</span>
+          </div>
+          <p className="mt-1 text-xs text-white/70">
+            Número máximo de reintentos por lote antes de avanzar al siguiente.
+          </p>
+        </div>
       </div>
 
       {/* Barra de progreso */}
