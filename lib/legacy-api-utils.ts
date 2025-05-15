@@ -36,7 +36,7 @@ const API_RETRY_COOLDOWN = 30 * 60 * 1000
 /**
  * Fetch with retry and exponential backoff
  */
-export async function fetchWithRetry(url: string, retries = 3, delay = 1000) {
+async function fetchWithRetry(url: string, retries = 3, delay = 1000) {
   let lastError
 
   for (let attempt = 0; attempt < retries; attempt++) {
@@ -175,46 +175,47 @@ async function fetchApiData(isContactsData = false) {
 
 /**
  * Get sheet data with caching and API fallback (legacy method)
- * @deprecated Use Supabase data sources instead
  */
-export async function getLegacySheetData() {
+export async function getSheetData(sheetName = "establecimientos") {
   const now = Date.now()
 
   // Return cached data if it's still valid
-  if (cachedEstablishmentsData && cachedContactsData && now - cacheTimestamp < CACHE_DURATION) {
-    return {
-      establishmentsData: cachedEstablishmentsData,
-      contactsData: cachedContactsData,
-    }
+  if (sheetName === "establecimientos" && cachedEstablishmentsData && now - cacheTimestamp < CACHE_DURATION) {
+    return cachedEstablishmentsData
+  }
+
+  if (sheetName === "contactos" && cachedContactsData && now - cacheTimestamp < CACHE_DURATION) {
+    return cachedContactsData
   }
 
   // Fetch new data with fallback logic
   try {
     // Fetch establishments data
-    const establishmentsData = await fetchApiData(false)
-
-    // Wait a bit before making the second request to avoid rate limiting
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    // Fetch contacts data
-    const contactsData = await fetchApiData(true)
+    const isContactsData = sheetName === "contactos"
+    const data = await fetchApiData(isContactsData)
 
     // Update cache
-    cachedEstablishmentsData = establishmentsData
-    cachedContactsData = contactsData
+    if (sheetName === "establecimientos") {
+      cachedEstablishmentsData = data
+    } else {
+      cachedContactsData = data
+    }
+
     cacheTimestamp = now
 
-    return { establishmentsData, contactsData }
+    return data
   } catch (error) {
     console.error("Error fetching sheet data:", error)
 
     // If we have cached data, return it even if it's expired
-    if (cachedEstablishmentsData && cachedContactsData) {
+    if (sheetName === "establecimientos" && cachedEstablishmentsData) {
       console.log("Returning expired cached data due to fetch error")
-      return {
-        establishmentsData: cachedEstablishmentsData,
-        contactsData: cachedContactsData,
-      }
+      return cachedEstablishmentsData
+    }
+
+    if (sheetName === "contactos" && cachedContactsData) {
+      console.log("Returning expired cached data due to fetch error")
+      return cachedContactsData
     }
 
     throw error
@@ -223,7 +224,6 @@ export async function getLegacySheetData() {
 
 /**
  * Get the legacy APIs status for debugging
- * @deprecated Use Supabase status check instead
  */
 export function getLegacyApiStatus() {
   return {
