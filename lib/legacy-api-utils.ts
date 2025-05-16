@@ -265,6 +265,53 @@ export async function getSheetData(sheet: string, retries = 3, delay = 1000): Pr
   throw lastError || new Error(`Error desconocido al obtener datos de ${sheet}`)
 }
 
+// Función para obtener datos de una hoja de Google Sheets por ID
+export async function getGoogleSheetData(sheetId: string): Promise<any[]> {
+  try {
+    console.log(`Obteniendo datos de la hoja de Google Sheets con ID: ${sheetId}`)
+
+    // Verificar que tenemos la API key de Google Sheets
+    if (!process.env.GOOGLE_SHEETS_API_KEY) {
+      throw new Error("No se ha configurado la API key de Google Sheets. Usando método alternativo.")
+    }
+
+    // Construir la URL para la API de Google Sheets
+    const apiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1?key=${process.env.GOOGLE_SHEETS_API_KEY}`
+
+    // Realizar la solicitud a la API
+    const response = await fetch(apiUrl)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Error al obtener datos de Google Sheets: ${response.status} - ${errorText}`)
+    }
+
+    const data = await response.json()
+
+    if (!data.values || !Array.isArray(data.values) || data.values.length <= 1) {
+      throw new Error("La hoja no contiene datos válidos o solo tiene encabezados")
+    }
+
+    // Convertir los datos a un array de objetos
+    const headers = data.values[0]
+    const rows = data.values.slice(1)
+
+    const result = rows.map((row) => {
+      const obj: Record<string, any> = {}
+      headers.forEach((header: string, index: number) => {
+        obj[header] = row[index] || null
+      })
+      return obj
+    })
+
+    console.log(`Datos obtenidos correctamente de Google Sheets: ${result.length} registros`)
+    return result
+  } catch (error) {
+    console.error("Error al obtener datos de Google Sheets:", error)
+    throw error
+  }
+}
+
 /**
  * Get the legacy APIs status for debugging
  */

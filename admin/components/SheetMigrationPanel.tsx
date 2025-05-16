@@ -1,329 +1,379 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { getAdminAuthKey } from "@/lib/admin-bypass"
+import { Loader2, AlertCircle, RefreshCw, Play, Info, Database, FileSpreadsheet } from "lucide-react"
 
-interface MigrationResult {
-  success: boolean
-  processed: number
-  inserted: number
-  updated: number
-  addedColumns: string[]
-  message: string
-  timestamp: string
-  error?: string
-}
-
-interface MigrationHistory {
-  sheetId: string
-  tableName: string
-  result: MigrationResult
-  timestamp: string
-}
-
-export default function SheetMigrationPanel() {
+export default function SheetMigrationPanel({ authKey }: { authKey: string }) {
+  const [loading, setLoading] = useState(false)
   const [sheetId, setSheetId] = useState("")
   const [tableName, setTableName] = useState("establecimientos")
-  const [isLoading, setIsLoading] = useState(false)
-  const [result, setResult] = useState<MigrationResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  const [history, setHistory] = useState<MigrationHistory[]>([])
+  const [migrationStatus, setMigrationStatus] = useState<Record<string, any> | null>(null)
   const [logs, setLogs] = useState<string[]>([])
-  const router = useRouter()
+  const [error, setError] = useState<string | null>(null)
+  const [recentMigrations, setRecentMigrations] = useState<any[]>([])
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
-  // Cargar historial de migraciones desde localStorage
+  // Función para agregar un log con timestamp
+  const addLog = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString()
+    setLogs((prevLogs) => [`[${timestamp}] ${message}`, ...prevLogs])
+  }
+
+  // Cargar migraciones recientes del localStorage al iniciar
   useEffect(() => {
-    const savedHistory = localStorage.getItem("migrationHistory")
-    if (savedHistory) {
-      try {
-        setHistory(JSON.parse(savedHistory))
-      } catch (e) {
-        console.error("Error al cargar historial de migraciones:", e)
+    try {
+      const savedMigrations = localStorage.getItem("recentMigrations")
+      if (savedMigrations) {
+        setRecentMigrations(JSON.parse(savedMigrations))
       }
+
+      // Agregar mensaje informativo sobre las limitaciones actuales
+      addLog("NOTA: En esta versión, solo se admiten las hojas 'establecimientos' y 'contactos'.")
+      addLog("Para migrar otras hojas, se requiere configurar la API key de Google Sheets.")
+    } catch (err) {
+      console.error("Error al cargar migraciones recientes:", err)
     }
   }, [])
 
-  // Función para agregar logs
-  const addLog = (message: string) => {
-    setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`])
+  // Guardar migraciones recientes en localStorage
+  const saveRecentMigration = (migration: any) => {
+    try {
+      const updatedMigrations = [migration, ...recentMigrations.slice(0, 9)] // Mantener solo las 10 más recientes
+      setRecentMigrations(updatedMigrations)
+      localStorage.setItem("recentMigrations", JSON.stringify(updatedMigrations))
+    } catch (err) {
+      console.error("Error al guardar migración reciente:", err)
+    }
   }
 
   // Función para iniciar la migración
   const startMigration = async () => {
-    if (!sheetId) {
-      setError("Por favor, ingresa el ID de la hoja de Google Sheets")
+    if (!sheetId.trim()) {
+      setError("Debes ingresar el ID de la hoja de Google Sheets")
       return
     }
 
-    setIsLoading(true)
-    setResult(null)
-    setError(null)
-    setLogs([])
-    addLog(`Iniciando migración desde la hoja ${sheetId} a la tabla ${tableName}...`)
+    // Validar que el ID de la hoja sea 'establecimientos' o 'contactos'
+    if (sheetId.trim() !== "establecimientos" && sheetId.trim() !== "contactos") {
+      setError("En esta versión, solo se admiten las hojas 'establecimientos' y 'contactos'.")
+      addLog("ERROR: ID de hoja no válido. Use 'establecimientos' o 'contactos'.")
+      return
+    }
 
     try {
-      const authKey = getAdminAuthKey()
+      setLoading(true)
+      setError(null)
+      setMigrationStatus(null)
+      addLog(`Iniciando migración desde la hoja ${sheetId} a la tabla ${tableName}...`)
 
-      if (!authKey) {
-        router.push("/admin")
-        return
-      }
-
-      addLog("Enviando solicitud al servidor...")
-
-      // Modificación: Implementar procesamiento por lotes para manejar el límite de tiempo
-      const batchSize = 100 // Procesar 100 registros a la vez
-
+      // Usamos el authKey que recibimos como prop
       const response = await fetch("/api/admin/migrate-sheet", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          authKey,
-          sheetId,
-          sheetName: tableName,
-          batchSize, // Añadir tamaño de lote para procesamiento incremental
+          authKey, // Usamos el token pasado como prop
+          sheetId: sheetId.trim(),
+          sheetName: tableName.trim(),
         }),
       })
 
       const data = await response.json()
 
-      if (data.success) {
-        setResult(data)
-        addLog(
-          `Migración completada con éxito. ${data.inserted} registros insertados, ${data.updated} registros actualizados.`,
-        )
-
-        // Si hay columnas nuevas, mostrarlas en los logs
-        if (data.addedColumns && data.addedColumns.length > 0) {
-          addLog(`Se agregaron ${data.addedColumns.length} columnas nuevas: ${data.addedColumns.join(", ")}`)
-        }
-
-        // Guardar en el historial
-        const newHistory: MigrationHistory = {
-          sheetId,
-          tableName,
-          result: data,
-          timestamp: new Date().toISOString(),
-        }
-
-        const updatedHistory = [newHistory, ...history].slice(0, 10) // Mantener solo las últimas 10 migraciones
-        setHistory(updatedHistory)
-        localStorage.setItem("migrationHistory", JSON.stringify(updatedHistory))
-      } else {
-        setError(data.error || "Error desconocido durante la migración")
-        addLog(`Error: ${data.error || "Error desconocido durante la migración"}`)
+      if (!response.ok) {
+        throw new Error(data.error || "Error desconocido durante la migración")
       }
+
+      setMigrationStatus(data)
+      addLog(
+        `Migración completada con éxito. ${data.inserted} registros insertados, ${data.updated} registros actualizados.`,
+      )
+
+      if (data.addedColumns && data.addedColumns.length > 0) {
+        addLog(`Se agregaron ${data.addedColumns.length} columnas nuevas: ${data.addedColumns.join(", ")}`)
+      }
+
+      // Guardar en el historial de migraciones recientes
+      saveRecentMigration({
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        sheetId,
+        tableName,
+        processed: data.processed,
+        inserted: data.inserted,
+        updated: data.updated,
+        addedColumns: data.addedColumns || [],
+      })
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Error desconocido"
-      setError(errorMessage)
-      addLog(`Error: ${errorMessage}`)
       console.error("Error durante la migración:", err)
+      setError(err instanceof Error ? err.message : "Error desconocido durante la migración")
+      addLog(`Error: ${err instanceof Error ? err.message : "Error desconocido"}`)
     } finally {
-      setIsLoading(false)
+      setLoading(false)
+    }
+  }
+
+  // Función para limpiar el formulario
+  const resetForm = () => {
+    if (!loading) {
+      setSheetId("")
+      setTableName("establecimientos")
+      setMigrationStatus(null)
+      setError(null)
+      setLogs([])
+      addLog("Formulario reiniciado")
+      addLog("NOTA: En esta versión, solo se admiten las hojas 'establecimientos' y 'contactos'.")
     }
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">Migración desde Google Sheets</h2>
+    <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6 border border-white/20 shadow-xl">
+      <h2 className="text-xl font-bold mb-4 text-white flex items-center">
+        <FileSpreadsheet className="w-5 h-5 mr-2" />
+        Migración desde Google Sheets
+      </h2>
 
-      {/* Formulario de migración */}
-      <div className="mb-8 bg-gray-50 p-4 rounded-lg">
+      {/* Alerta de limitación */}
+      <div className="bg-amber-900/30 border-l-4 border-amber-500 text-amber-200 p-4 mb-4 rounded">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <AlertCircle className="h-5 w-5 text-amber-400" />
+          </div>
+          <div className="ml-3">
+            <p className="text-sm">
+              <strong>Limitación actual:</strong> En esta versión, solo se admiten las hojas 'establecimientos' y
+              'contactos'. Para migrar otras hojas, se requiere configurar la API key de Google Sheets.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-900/30 border-l-4 border-red-500 text-red-200 p-4 mb-4 rounded">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <AlertCircle className="h-5 w-5 text-red-400" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mb-6">
         <div className="mb-4">
-          <label htmlFor="sheetId" className="block text-sm font-medium text-gray-700 mb-1">
-            ID de la hoja de Google Sheets
+          <label htmlFor="sheetId" className="block text-sm font-medium text-white mb-1">
+            ID de la hoja
           </label>
           <input
             type="text"
             id="sheetId"
             value={sheetId}
             onChange={(e) => setSheetId(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Ingresa el ID de la hoja (se encuentra en la URL)"
-            disabled={isLoading}
+            placeholder="Ingresa 'establecimientos' o 'contactos'"
+            className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-white/30 rounded-md bg-white/10 text-white p-2"
+            disabled={loading}
           />
-          <p className="text-xs text-gray-500 mt-1">
-            El ID se encuentra en la URL de la hoja: https://docs.google.com/spreadsheets/d/
-            <span className="font-bold">ID-DE-LA-HOJA</span>/edit
+          <p className="mt-1 text-xs text-white/70">
+            En esta versión, solo se admiten los valores 'establecimientos' o 'contactos'
           </p>
         </div>
 
-        {/* Opciones avanzadas (colapsables) */}
         <div className="mb-4">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className="text-sm text-blue-600 hover:text-blue-800 focus:outline-none flex items-center"
-          >
-            {showAdvanced ? "▼" : "►"} Opciones avanzadas
-          </button>
+          <div className="flex items-center justify-between">
+            <label htmlFor="tableName" className="block text-sm font-medium text-white mb-1">
+              Tabla de destino
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-xs text-white/70 hover:text-white"
+            >
+              {showAdvanced ? "Ocultar opciones avanzadas" : "Mostrar opciones avanzadas"}
+            </button>
+          </div>
 
-          {showAdvanced && (
-            <div className="mt-2 pl-4 border-l-2 border-gray-200">
-              <div className="mb-3">
-                <label htmlFor="tableName" className="block text-sm font-medium text-gray-700 mb-1">
-                  Tabla de destino
-                </label>
-                <input
-                  type="text"
-                  id="tableName"
-                  value={tableName}
-                  onChange={(e) => setTableName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Nombre de la tabla en Supabase"
-                  disabled={isLoading}
-                />
-              </div>
-              <p className="text-xs text-gray-500">
-                Por defecto, los datos se migrarán a la tabla &quot;establecimientos&quot;. Cambia este valor solo si
-                sabes lo que estás haciendo.
-              </p>
+          {showAdvanced ? (
+            <input
+              type="text"
+              id="tableName"
+              value={tableName}
+              onChange={(e) => setTableName(e.target.value)}
+              placeholder="Nombre de la tabla"
+              className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-sm border-white/30 rounded-md bg-white/10 text-white p-2"
+              disabled={loading}
+            />
+          ) : (
+            <div className="bg-white/5 p-2 rounded-md border border-white/10 text-white/80">
+              establecimientos <span className="text-xs text-white/50">(predeterminado)</span>
             </div>
           )}
         </div>
+      </div>
 
+      <div className="flex flex-wrap gap-2 mb-6">
         <button
           onClick={startMigration}
-          disabled={isLoading || !sheetId}
-          className={`w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white 
-            ${
-              isLoading || !sheetId
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            }`}
+          disabled={loading || !sheetId.trim()}
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary/50 disabled:opacity-50"
         >
-          {isLoading ? "Migrando datos..." : "Iniciar Migración"}
+          {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
+          {loading ? "Migrando..." : "Iniciar Migración"}
+        </button>
+
+        <button
+          onClick={resetForm}
+          disabled={loading}
+          className="inline-flex items-center px-4 py-2 border border-white/30 text-sm font-medium rounded-md shadow-sm text-white bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary/50 disabled:opacity-50"
+        >
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Limpiar
         </button>
       </div>
 
       {/* Resultados de la migración */}
-      {result && (
-        <div className="mb-8 bg-green-50 p-4 rounded-lg border border-green-200">
-          <h3 className="text-lg font-semibold text-green-800 mb-2">Migración Completada</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div className="bg-white p-3 rounded-md shadow-sm">
-              <p className="text-sm text-gray-500">Registros Procesados</p>
-              <p className="text-2xl font-bold text-gray-800">{result.processed}</p>
+      {migrationStatus && (
+        <div className="mb-6 bg-gray-800/50 p-4 rounded-md border border-white/10">
+          <h3 className="text-sm font-medium text-white mb-2 flex items-center">
+            <Database className="w-4 h-4 mr-2" />
+            Resultados de la migración
+          </h3>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-white/70">Registros procesados:</span>{" "}
+              <span className="font-medium text-white">{migrationStatus.processed || 0}</span>
             </div>
-            <div className="bg-white p-3 rounded-md shadow-sm">
-              <p className="text-sm text-gray-500">Registros Insertados</p>
-              <p className="text-2xl font-bold text-green-600">{result.inserted}</p>
+            <div>
+              <span className="text-white/70">Registros insertados:</span>{" "}
+              <span className="font-medium text-green-400">{migrationStatus.inserted || 0}</span>
             </div>
-            <div className="bg-white p-3 rounded-md shadow-sm">
-              <p className="text-sm text-gray-500">Registros Actualizados</p>
-              <p className="text-2xl font-bold text-blue-600">{result.updated}</p>
+            <div>
+              <span className="text-white/70">Registros actualizados:</span>{" "}
+              <span className="font-medium text-amber-400">{migrationStatus.updated || 0}</span>
+            </div>
+            <div>
+              <span className="text-white/70">Columnas nuevas:</span>{" "}
+              <span className="font-medium text-blue-400">{migrationStatus.addedColumns?.length || 0}</span>
             </div>
           </div>
 
-          {result.addedColumns && result.addedColumns.length > 0 && (
-            <div className="mt-4">
-              <h4 className="text-md font-medium text-gray-700 mb-2">Columnas Nuevas Agregadas:</h4>
-              <div className="bg-white p-3 rounded-md shadow-sm max-h-40 overflow-y-auto">
-                <ul className="list-disc pl-5 text-sm">
-                  {result.addedColumns.map((column, index) => (
-                    <li key={index} className="text-gray-700">
-                      {column}
-                    </li>
-                  ))}
-                </ul>
+          {migrationStatus.addedColumns && migrationStatus.addedColumns.length > 0 && (
+            <div className="mt-3 bg-blue-900/20 p-2 rounded border border-blue-500/30 text-xs">
+              <div className="font-medium text-blue-300 mb-1">Columnas agregadas:</div>
+              <div className="flex flex-wrap gap-1">
+                {migrationStatus.addedColumns.map((column: string, index: number) => (
+                  <span key={index} className="bg-blue-800/50 px-2 py-1 rounded text-blue-200">
+                    {column}
+                  </span>
+                ))}
               </div>
             </div>
           )}
-
-          <p className="text-sm text-gray-600 mt-4">
-            Migración completada el {new Date(result.timestamp).toLocaleString()}
-          </p>
         </div>
       )}
 
-      {/* Mensaje de error */}
-      {error && (
-        <div className="mb-8 bg-red-50 p-4 rounded-lg border border-red-200">
-          <h3 className="text-lg font-semibold text-red-800 mb-2">Error en la Migración</h3>
-          <p className="text-red-700">{error}</p>
+      {/* Migraciones recientes */}
+      {recentMigrations.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-sm font-medium text-white mb-2">Migraciones recientes</h3>
+          <div className="bg-gray-800/50 rounded-md border border-white/10 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-700">
+                <thead className="bg-gray-700/30">
+                  <tr>
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-white/70">
+                      Fecha
+                    </th>
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-white/70">
+                      Hoja
+                    </th>
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-white/70">
+                      Tabla
+                    </th>
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-white/70">
+                      Procesados
+                    </th>
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-white/70">
+                      Resultado
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700/50">
+                  {recentMigrations.map((migration) => (
+                    <tr key={migration.id} className="hover:bg-gray-700/20">
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-white/80">
+                        {new Date(migration.timestamp).toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-white/80">
+                        {migration.sheetId.length > 15 ? migration.sheetId.substring(0, 12) + "..." : migration.sheetId}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-white/80">{migration.tableName}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs text-white/80">{migration.processed}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs">
+                        <div className="flex items-center space-x-1">
+                          <span className="text-green-400">{migration.inserted} ins</span>
+                          <span className="text-white/50">|</span>
+                          <span className="text-amber-400">{migration.updated} act</span>
+                          {migration.addedColumns.length > 0 && (
+                            <>
+                              <span className="text-white/50">|</span>
+                              <span className="text-blue-400">{migration.addedColumns.length} cols</span>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Logs de la migración */}
-      {logs.length > 0 && (
-        <div className="mb-8">
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Logs de la Migración</h3>
-          <div className="bg-gray-800 text-gray-200 p-3 rounded-md shadow-sm max-h-60 overflow-y-auto font-mono text-sm">
-            {logs.map((log, index) => (
+      {/* Logs */}
+      <div>
+        <h3 className="text-sm font-medium text-white mb-2">Logs de migración</h3>
+        <div className="bg-gray-900/70 text-gray-200 p-4 rounded-md h-64 overflow-y-auto font-mono text-xs border border-white/10">
+          {logs.length > 0 ? (
+            logs.map((log, index) => (
               <div key={index} className="mb-1">
                 {log}
               </div>
-            ))}
-          </div>
+            ))
+          ) : (
+            <div className="text-gray-400">No hay logs disponibles</div>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Historial de migraciones */}
-      {history.length > 0 && (
-        <div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">Historial de Migraciones</h3>
-          <div className="bg-white border rounded-md shadow-sm overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Fecha
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Hoja
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Tabla
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Resultado
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {history.map((item, index) => (
-                  <tr key={index} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(item.timestamp).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {item.sheetId.substring(0, 10)}...
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.tableName}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {item.result.success ? (
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                          {item.result.inserted} insertados, {item.result.updated} actualizados
-                        </span>
-                      ) : (
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                          Error
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      {/* Información de ayuda */}
+      <div className="mt-6">
+        <div className="flex items-center mb-2">
+          <Info className="w-4 h-4 text-blue-400 mr-2" />
+          <h3 className="text-sm font-medium text-white">Información</h3>
         </div>
-      )}
+        <div className="bg-blue-900/20 border border-blue-500/30 rounded-md p-3 text-xs text-blue-200">
+          <p className="mb-2">
+            Esta herramienta permite migrar datos desde una hoja de Google Sheets a la base de datos Supabase.
+          </p>
+          <p className="mb-2">
+            <strong>Limitación actual:</strong> En esta versión, solo se admiten las hojas 'establecimientos' y
+            'contactos'.
+          </p>
+          <p className="mb-2">
+            <strong>Características principales:</strong>
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Normaliza automáticamente los nombres de columnas (minúsculas, guiones bajos)</li>
+            <li>Agrega columnas nuevas si no existen en la tabla de destino</li>
+            <li>Actualiza registros existentes (por CUE) sin sobrescribir con valores nulos</li>
+            <li>Inserta registros nuevos que no existen en la base de datos</li>
+          </ul>
+        </div>
+      </div>
     </div>
   )
 }

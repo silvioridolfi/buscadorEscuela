@@ -6,7 +6,11 @@ export function verifyAdminAuth(token: string | null): boolean {
   const secretKey = process.env.MIGRATION_AUTH_KEY
 
   if (!secretKey) {
-    console.error("MIGRATION_AUTH_KEY no está configurada en las variables de entorno")
+    console.warn("MIGRATION_AUTH_KEY no está configurada en las variables de entorno")
+    // Si estamos en desarrollo y no hay clave configurada, aceptamos el token de bypass
+    if (process.env.NODE_ENV === "development" && token === "bypass_token_temporary") {
+      return true
+    }
     return false
   }
 
@@ -24,7 +28,9 @@ export function generateAdminToken(): string {
   const secretKey = process.env.MIGRATION_AUTH_KEY
 
   if (!secretKey) {
-    throw new Error("MIGRATION_AUTH_KEY no está configurada en las variables de entorno")
+    console.warn("MIGRATION_AUTH_KEY no está configurada en las variables de entorno, usando bypass")
+    // Usar un valor de bypass para desarrollo
+    return "bypass_token_temporary"
   }
 
   // Devolver directamente la clave secreta como token

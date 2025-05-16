@@ -2,11 +2,12 @@ import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 import { getSheetData } from "@/lib/legacy-api-utils"
 import { verifyAdminAuth } from "@/lib/auth-utils"
+import { bypassAdminAuth } from "@/lib/admin-bypass"
 
 export const dynamic = "force-dynamic"
-export const fetchCache = "force-no-store"
+export const fetchCache = "force_no_store"
 export const revalidate = 0
-export const maxDuration = 60 // Ajustado al máximo permitido (60 segundos)
+export const maxDuration = 60 // Máximo permitido: 60 segundos
 
 // Función para manejar errores y siempre devolver JSON válido
 function handleError(error: any, status = 500) {
@@ -28,74 +29,144 @@ function normalizeColumnName(columnName: string): string {
   return columnName.toLowerCase().replace(/\s+/g, "_").trim()
 }
 
-// Función para obtener las columnas existentes de una tabla
-async function getExistingColumns(tableName: string): Promise<string[]> {
+// Función para verificar si una tabla existe
+async function tableExists(tableName: string): Promise<boolean> {
   try {
-    const { data, error } = await supabaseAdmin.rpc("get_table_columns", { table_name: tableName })
+    // Intentamos hacer una consulta simple a la tabla
+    const { data, error } = await supabaseAdmin.from(tableName).select("*").limit(1)
 
-    if (error) {
-      console.error(`Error al obtener columnas de la tabla ${tableName}:`, error)
-      throw error
-    }
-
-    return data || []
+    // Si no hay error, la tabla existe
+    return !error
   } catch (error) {
-    console.error(`Error al obtener columnas de la tabla ${tableName}:`, error)
-
-    // Intento alternativo usando información del esquema
-    try {
-      const { data, error } = await supabaseAdmin
-        .from("information_schema.columns")
-        .select("column_name")
-        .eq("table_name", tableName)
-
-      if (error) throw error
-
-      return data ? data.map((col) => col.column_name) : []
-    } catch (innerError) {
-      console.error(`Error alternativo al obtener columnas:`, innerError)
-      throw error // Lanzamos el error original
-    }
+    console.error(`Error al verificar si la tabla existe:`, error)
+    return false
   }
 }
 
-// Función para agregar columnas nuevas si no existen
-async function addMissingColumns(tableName: string, columns: string[]): Promise<string[]> {
+// Función para crear una tabla si no existe
+async function createTableIfNotExists(tableName: string, columns: string[]): Promise<boolean> {
   try {
-    // Obtener columnas existentes
-    const existingColumns = await getExistingColumns(tableName)
-    const columnsToAdd = columns.filter((col) => !existingColumns.includes(col))
+    // Verificar si la tabla ya existe
+    const exists = await tableExists(tableName)
 
-    // Agregar columnas nuevas
-    for (const column of columnsToAdd) {
+    if (exists) {
+      console.log(`La tabla ${tableName} ya existe.`)
+      return true
+    }
+
+    // Crear la tabla con las columnas proporcionadas
+    const createTableSQL = `
+      CREATE TABLE ${tableName} (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        cue TEXT,
+        nombre TEXT,
+        direccion TEXT,
+        localidad TEXT,
+        codigo_postal TEXT,
+        telefono TEXT,
+        email TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `
+
+    // Ejecutar la consulta SQL para crear la tabla
+    const { error } = await supabaseAdmin.rpc("execute_sql", { sql: createTableSQL })
+
+    if (error) {
+      console.error(`Error al crear la tabla ${tableName}:`, error)
+
+      // Intentar con un enfoque más simple
       try {
-        const { error } = await supabaseAdmin.rpc("alter_table_add_column_if_not_exists", {
-          table_name: tableName,
-          column_name: column,
-          column_type: "TEXT",
-        })
+        // Crear una tabla mínima y luego agregar columnas
+        const simpleCreateSQL = `
+          CREATE TABLE ${tableName} (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            cue TEXT
+          );
+        `
 
-        if (error) {
-          // Si falla la función RPC, intentamos con SQL directo
-          console.warn(`Error al usar RPC para agregar columna ${column}:`, error)
+        const { error: simpleError } = await supabaseAdmin.rpc("execute_sql", { sql: simpleCreateSQL })
 
-          const sql = `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ${column} TEXT;`
-          const { error: sqlError } = await supabaseAdmin.rpc("execute_sql", { sql })
-
-          if (sqlError) {
-            throw sqlError
-          }
+        if (simpleError) {
+          console.error(`Error al crear tabla simple:`, simpleError)
+          return false
         }
-      } catch (columnError) {
-        console.error(`Error al agregar columna ${column}:`, columnError)
-        throw columnError
+
+        return true
+      } catch (simpleError) {
+        console.error(`Error al crear tabla simple:`, simpleError)
+        return false
       }
     }
 
-    return columnsToAdd
+    console.log(`Tabla ${tableName} creada correctamente.`)
+    return true
+  } catch (error) {
+    console.error(`Error al crear la tabla ${tableName}:`, error)
+    return false
+  }
+}
+
+// Función para verificar si una columna existe en una tabla
+async function columnExists(tableName: string, columnName: string): Promise<boolean> {
+  try {
+    // Intentamos hacer una consulta seleccionando solo esa columna
+    const { error } = await supabaseAdmin.from(tableName).select(columnName).limit(1)
+
+    // Si no hay error, la columna existe
+    return !error
+  } catch (error) {
+    console.error(`Error al verificar si la columna ${columnName} existe:`, error)
+    return false
+  }
+}
+
+// Función para agregar una columna a una tabla
+async function addColumnToTable(tableName: string, columnName: string): Promise<boolean> {
+  try {
+    // Verificar si la columna ya existe
+    const exists = await columnExists(tableName, columnName)
+
+    if (exists) {
+      return true
+    }
+
+    // Agregar la columna
+    const alterSQL = `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ${columnName} TEXT;`
+
+    const { error } = await supabaseAdmin.rpc("execute_sql", { sql: alterSQL })
+
+    if (error) {
+      console.error(`Error al agregar columna ${columnName}:`, error)
+      return false
+    }
+
+    return true
+  } catch (error) {
+    console.error(`Error al agregar columna ${columnName}:`, error)
+    return false
+  }
+}
+
+// Función para agregar columnas a una tabla existente
+async function addColumnsToTable(tableName: string, columns: string[]): Promise<string[]> {
+  try {
+    const addedColumns: string[] = []
+
+    // Agregar cada columna individualmente
+    for (const column of columns) {
+      const added = await addColumnToTable(tableName, column)
+
+      if (added) {
+        addedColumns.push(column)
+      }
+    }
+
+    return addedColumns
   } catch (error) {
     console.error(`Error al agregar columnas a la tabla ${tableName}:`, error)
-    throw error
+    return []
   }
 }
 
@@ -117,9 +188,12 @@ async function recordExistsByCUE(tableName: string, cue: any): Promise<boolean> 
 }
 
 // Función para procesar los datos y actualizar/insertar en la base de datos
-async function processData(tableName: string, data: any[]): Promise<{ inserted: number; updated: number }> {
+async function processData(
+  tableName: string,
+  data: any[],
+): Promise<{ inserted: number; updated: number; addedColumns: string[] }> {
   if (!data || data.length === 0) {
-    return { inserted: 0, updated: 0 }
+    return { inserted: 0, updated: 0, addedColumns: [] }
   }
 
   // Normalizar nombres de columnas en los datos
@@ -137,8 +211,15 @@ async function processData(tableName: string, data: any[]): Promise<{ inserted: 
   // Obtener todas las columnas normalizadas
   const allColumns = Array.from(new Set(normalizedData.flatMap((record) => Object.keys(record))))
 
+  // Verificar si la tabla existe, si no, crearla
+  const tableCreated = await createTableIfNotExists(tableName, allColumns)
+
+  if (!tableCreated) {
+    throw new Error(`No se pudo crear la tabla ${tableName}.`)
+  }
+
   // Agregar columnas que no existen
-  const addedColumns = await addMissingColumns(tableName, allColumns)
+  const addedColumns = await addColumnsToTable(tableName, allColumns)
 
   // Procesar cada registro
   let inserted = 0
@@ -186,7 +267,7 @@ async function processData(tableName: string, data: any[]): Promise<{ inserted: 
     }
   }
 
-  return { inserted, updated }
+  return { inserted, updated, addedColumns }
 }
 
 export async function POST(request: Request) {
@@ -200,31 +281,45 @@ export async function POST(request: Request) {
       return handleError(new Error("Falta el ID de la hoja de cálculo"), 400)
     }
 
-    // Verificar autenticación
-    const isAuthenticated = verifyAdminAuth(authKey)
+    // Verificar autenticación - MODIFICADO para aceptar bypass en desarrollo
+    let isAuthenticated = verifyAdminAuth(authKey)
+
+    // Si estamos en desarrollo, también aceptamos el bypass
+    if (!isAuthenticated && process.env.NODE_ENV === "development") {
+      isAuthenticated = bypassAdminAuth() && authKey === "bypass_token_temporary"
+    }
 
     if (!isAuthenticated) {
+      console.error("Autenticación fallida. Token recibido:", authKey)
       return handleError(new Error("No autorizado: Clave de autenticación inválida"), 401)
     }
 
-    // Obtener datos de la hoja
-    const sheetData = await getSheetData(sheetId)
+    // Obtener datos de la hoja - MODIFICADO para usar directamente la función legacy
+    let sheetData: any[] = []
+
+    try {
+      // Usar directamente la función legacy ya que la API key de Google no está configurada
+      console.log("Obteniendo datos con la API legacy...")
+      sheetData = await getSheetData(sheetId)
+    } catch (error) {
+      console.error("Error al obtener datos:", error)
+      return handleError(
+        new Error(
+          `No se pudieron obtener datos de la hoja. Verifique el ID y los permisos. Solo se admiten las hojas 'establecimientos' y 'contactos' en esta versión.`,
+        ),
+        404,
+      )
+    }
 
     if (!sheetData || !Array.isArray(sheetData) || sheetData.length === 0) {
       return handleError(new Error("No se encontraron datos en la hoja especificada"), 404)
     }
 
+    console.log(`Datos obtenidos correctamente. Procesando ${sheetData.length} registros...`)
+
     // Procesar los datos
     const tableName = sheetName.toLowerCase()
-    const { inserted, updated } = await processData(tableName, sheetData)
-
-    // Obtener columnas agregadas
-    const allColumns = Array.from(
-      new Set(sheetData.flatMap((record) => Object.keys(record).map((key) => normalizeColumnName(key)))),
-    )
-
-    const existingColumns = await getExistingColumns(tableName)
-    const addedColumns = allColumns.filter((col) => !existingColumns.includes(col))
+    const { inserted, updated, addedColumns } = await processData(tableName, sheetData)
 
     // Devolver respuesta
     return NextResponse.json({
