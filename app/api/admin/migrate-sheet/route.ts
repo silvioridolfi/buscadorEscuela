@@ -5,7 +5,7 @@ import { verifyAdminAuth } from "@/lib/auth-utils"
 import { bypassAdminAuth } from "@/lib/admin-bypass"
 
 export const dynamic = "force-dynamic"
-export const fetchCache = "force_no_store"
+export const fetchCache = "force-no-store"
 export const revalidate = 0
 export const maxDuration = 60 // Máximo permitido: 60 segundos
 
@@ -24,9 +24,26 @@ function handleError(error: any, status = 500) {
   )
 }
 
-// Función para normalizar nombres de columnas
+// Función para normalizar nombres de columnas - MEJORADA para manejar acentos y caracteres especiales
 function normalizeColumnName(columnName: string): string {
-  return columnName.toLowerCase().replace(/\s+/g, "_").trim()
+  if (!columnName) return ""
+
+  // Primero convertimos a minúsculas y reemplazamos espacios por guiones bajos
+  let normalized = columnName.toLowerCase().replace(/\s+/g, "_").trim()
+
+  // Luego eliminamos los acentos/tildes
+  normalized = normalized.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+
+  // Eliminar caracteres especiales y guiones bajos al principio
+  normalized = normalized.replace(/^[_\W]+/, "")
+
+  // Reemplazar caracteres no alfanuméricos con guiones bajos
+  normalized = normalized.replace(/[^\w]/g, "_")
+
+  // Eliminar guiones bajos múltiples
+  normalized = normalized.replace(/_+/g, "_")
+
+  return normalized
 }
 
 // Función para verificar si una tabla existe
@@ -43,158 +60,144 @@ async function tableExists(tableName: string): Promise<boolean> {
   }
 }
 
-// Función para crear una tabla si no existe
-async function createTableIfNotExists(tableName: string, columns: string[]): Promise<boolean> {
+// Función para obtener las columnas existentes en una tabla
+async function getTableColumns(tableName: string): Promise<string[]> {
   try {
-    // Verificar si la tabla ya existe
-    const exists = await tableExists(tableName)
+    // Enfoque directo: intentar inferir columnas de una fila
+    const { data: sampleRow, error: sampleError } = await supabaseAdmin.from(tableName).select("*").limit(1).single()
 
-    if (exists) {
-      console.log(`La tabla ${tableName} ya existe.`)
-      return true
+    if (sampleError || !sampleRow) {
+      console.error(`Error al obtener muestra de la tabla ${tableName}:`, sampleError)
+
+      // Si no hay datos, intentamos con un enfoque alternativo
+      // Definimos columnas básicas que sabemos que existen
+      return [
+        "id",
+        "cue",
+        "nombre",
+        "direccion",
+        "distrito",
+        "ciudad",
+        "lat",
+        "lon",
+        "predio",
+        "created_at",
+        "updated_at",
+      ]
     }
 
-    // Crear la tabla con las columnas proporcionadas
-    const createTableSQL = `
-      CREATE TABLE ${tableName} (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        cue TEXT,
-        nombre TEXT,
-        direccion TEXT,
-        localidad TEXT,
-        codigo_postal TEXT,
-        telefono TEXT,
-        email TEXT,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
-    `
+    // Extraer nombres de columnas del objeto de muestra
+    return Object.keys(sampleRow)
+  } catch (error) {
+    console.error(`Error al obtener columnas de la tabla ${tableName}:`, error)
+    // Devolver columnas básicas como fallback
+    return [
+      "id",
+      "cue",
+      "nombre",
+      "direccion",
+      "distrito",
+      "ciudad",
+      "lat",
+      "lon",
+      "predio",
+      "created_at",
+      "updated_at",
+    ]
+  }
+}
 
-    // Ejecutar la consulta SQL para crear la tabla
-    const { error } = await supabaseAdmin.rpc("execute_sql", { sql: createTableSQL })
+// Función para obtener los tipos de columnas de una tabla
+async function getColumnTypes(tableName: string): Promise<Record<string, string>> {
+  // Definimos tipos conocidos para columnas comunes
+  const knownTypes: Record<string, string> = {
+    lat: "double precision",
+    lon: "double precision",
+    latitude: "double precision",
+    longitude: "double precision",
+    latitud: "double precision",
+    longitud: "double precision",
+    mb: "double precision", // Megabytes o ancho de banda
+  }
 
-    if (error) {
-      console.error(`Error al crear la tabla ${tableName}:`, error)
+  return knownTypes
+}
 
-      // Intentar con un enfoque más simple
-      try {
-        // Crear una tabla mínima y luego agregar columnas
-        const simpleCreateSQL = `
-          CREATE TABLE ${tableName} (
-            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            cue TEXT
-          );
-        `
+// Función para verificar si un valor es un valor especial de hoja de cálculo
+function isSpreadsheetSpecialValue(value: any): boolean {
+  if (typeof value !== "string") return false
 
-        const { error: simpleError } = await supabaseAdmin.rpc("execute_sql", { sql: simpleCreateSQL })
+  // Lista de valores especiales comunes en hojas de cálculo
+  const specialValues = ["#N/A", "#NA", "N/A", "#VALUE!", "#DIV/0!", "#REF!", "#NUM!", "#NULL!", "NULL", "-"]
 
-        if (simpleError) {
-          console.error(`Error al crear tabla simple:`, simpleError)
-          return false
-        }
+  return specialValues.includes(value.toUpperCase().trim())
+}
 
-        return true
-      } catch (simpleError) {
-        console.error(`Error al crear tabla simple:`, simpleError)
-        return false
+// Función para convertir valores según su tipo
+function convertValueByType(value: any, columnName: string, columnTypes: Record<string, string>): any {
+  if (value === null || value === undefined || value === "") {
+    return null
+  }
+
+  // Verificar si es un valor especial de hoja de cálculo
+  if (isSpreadsheetSpecialValue(value)) {
+    return null
+  }
+
+  // Si es un campo numérico conocido, convertir comas a puntos
+  const columnType = columnTypes[columnName]
+  if (columnType === "double precision") {
+    if (typeof value === "string") {
+      // Convertir coma a punto para números decimales
+      const convertedValue = value.replace(",", ".")
+
+      // Verificar si es un número válido
+      if (!isNaN(Number.parseFloat(convertedValue))) {
+        return Number.parseFloat(convertedValue)
       }
+
+      // Si no es un número válido, devolver null
+      return null
+    } else if (typeof value === "number") {
+      // Ya es un número, devolverlo tal cual
+      return value
     }
 
-    console.log(`Tabla ${tableName} creada correctamente.`)
-    return true
-  } catch (error) {
-    console.error(`Error al crear la tabla ${tableName}:`, error)
-    return false
+    // Si no es string ni number, devolver null
+    return null
   }
-}
 
-// Función para verificar si una columna existe en una tabla
-async function columnExists(tableName: string, columnName: string): Promise<boolean> {
-  try {
-    // Intentamos hacer una consulta seleccionando solo esa columna
-    const { error } = await supabaseAdmin.from(tableName).select(columnName).limit(1)
-
-    // Si no hay error, la columna existe
-    return !error
-  } catch (error) {
-    console.error(`Error al verificar si la columna ${columnName} existe:`, error)
-    return false
-  }
-}
-
-// Función para agregar una columna a una tabla
-async function addColumnToTable(tableName: string, columnName: string): Promise<boolean> {
-  try {
-    // Verificar si la columna ya existe
-    const exists = await columnExists(tableName, columnName)
-
-    if (exists) {
-      return true
-    }
-
-    // Agregar la columna
-    const alterSQL = `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ${columnName} TEXT;`
-
-    const { error } = await supabaseAdmin.rpc("execute_sql", { sql: alterSQL })
-
-    if (error) {
-      console.error(`Error al agregar columna ${columnName}:`, error)
-      return false
-    }
-
-    return true
-  } catch (error) {
-    console.error(`Error al agregar columna ${columnName}:`, error)
-    return false
-  }
-}
-
-// Función para agregar columnas a una tabla existente
-async function addColumnsToTable(tableName: string, columns: string[]): Promise<string[]> {
-  try {
-    const addedColumns: string[] = []
-
-    // Agregar cada columna individualmente
-    for (const column of columns) {
-      const added = await addColumnToTable(tableName, column)
-
-      if (added) {
-        addedColumns.push(column)
-      }
-    }
-
-    return addedColumns
-  } catch (error) {
-    console.error(`Error al agregar columnas a la tabla ${tableName}:`, error)
-    return []
-  }
-}
-
-// Función para verificar si un registro existe por su CUE
-async function recordExistsByCUE(tableName: string, cue: any): Promise<boolean> {
-  try {
-    const { data, error, count } = await supabaseAdmin
-      .from(tableName)
-      .select("*", { count: "exact", head: true })
-      .eq("cue", cue)
-
-    if (error) throw error
-
-    return count !== null && count > 0
-  } catch (error) {
-    console.error(`Error al verificar existencia de registro con CUE ${cue}:`, error)
-    throw error
-  }
+  return value
 }
 
 // Función para procesar los datos y actualizar/insertar en la base de datos
 async function processData(
   tableName: string,
   data: any[],
-): Promise<{ inserted: number; updated: number; addedColumns: string[] }> {
+): Promise<{ inserted: number; updated: number; skippedColumns: string[]; errors: string[] }> {
   if (!data || data.length === 0) {
-    return { inserted: 0, updated: 0, addedColumns: [] }
+    return { inserted: 0, updated: 0, skippedColumns: [], errors: [] }
   }
+
+  // Verificar si la tabla existe
+  const tableExist = await tableExists(tableName)
+
+  // Si la tabla no existe, no podemos continuar
+  if (!tableExist) {
+    console.log(`La tabla ${tableName} no existe. Se asume que debe ser creada manualmente.`)
+    throw new Error(`La tabla ${tableName} no existe en la base de datos. Debe crearla manualmente primero.`)
+  }
+
+  // Obtener las columnas existentes en la tabla
+  const existingColumns = await getTableColumns(tableName)
+  console.log(`Columnas existentes en la tabla ${tableName}:`, existingColumns)
+
+  if (existingColumns.length === 0) {
+    throw new Error(`No se pudieron obtener las columnas de la tabla ${tableName}. Verifique los permisos.`)
+  }
+
+  // Obtener los tipos de columnas
+  const columnTypes = await getColumnTypes(tableName)
 
   // Normalizar nombres de columnas en los datos
   const normalizedData = data.map((record) => {
@@ -202,24 +205,22 @@ async function processData(
 
     Object.entries(record).forEach(([key, value]) => {
       const normalizedKey = normalizeColumnName(key)
-      normalizedRecord[normalizedKey] = value
+      if (normalizedKey) {
+        normalizedRecord[normalizedKey] = value
+      }
     })
 
     return normalizedRecord
   })
 
-  // Obtener todas las columnas normalizadas
-  const allColumns = Array.from(new Set(normalizedData.flatMap((record) => Object.keys(record))))
+  // Obtener todas las columnas normalizadas de los datos
+  const allDataColumns = Array.from(new Set(normalizedData.flatMap((record) => Object.keys(record))))
 
-  // Verificar si la tabla existe, si no, crearla
-  const tableCreated = await createTableIfNotExists(tableName, allColumns)
+  // Identificar columnas que no existen en la tabla
+  const skippedColumns = allDataColumns.filter((col) => !existingColumns.includes(col))
+  console.log(`Columnas que se omitirán por no existir en la tabla:`, skippedColumns)
 
-  if (!tableCreated) {
-    throw new Error(`No se pudo crear la tabla ${tableName}.`)
-  }
-
-  // Agregar columnas que no existen
-  const addedColumns = await addColumnsToTable(tableName, allColumns)
+  const errors: string[] = []
 
   // Procesar cada registro
   let inserted = 0
@@ -232,42 +233,70 @@ async function processData(
 
       if (!cue) {
         console.warn("Registro sin CUE encontrado, se omitirá:", record)
+        errors.push("Registro sin CUE encontrado, se omitió")
         continue
       }
 
-      const exists = await recordExistsByCUE(tableName, cue)
+      // Filtrar solo las columnas que existen en la tabla y convertir valores según el tipo
+      const filteredRecord: Record<string, any> = {}
+      Object.entries(record).forEach(([key, value]) => {
+        if (existingColumns.includes(key)) {
+          // Convertir el valor según el tipo de columna
+          const convertedValue = convertValueByType(value, key, columnTypes)
+
+          // Solo incluir valores no nulos
+          if (convertedValue !== null && convertedValue !== undefined && convertedValue !== "") {
+            filteredRecord[key] = convertedValue
+          }
+        }
+      })
+
+      // Si no hay campos válidos después de filtrar, omitir este registro
+      if (Object.keys(filteredRecord).length === 0) {
+        console.warn(`Registro con CUE ${cue} no tiene campos válidos después de filtrar, se omitirá.`)
+        errors.push(`Registro con CUE ${cue} no tiene campos válidos después de filtrar, se omitió.`)
+        continue
+      }
+
+      // Verificar si el registro existe
+      const { data, error, count } = await supabaseAdmin
+        .from(tableName)
+        .select("*", { count: "exact", head: true })
+        .eq("cue", cue)
+
+      const exists = count !== null && count > 0
 
       if (exists) {
-        // Filtrar campos no nulos para actualización
-        const updateData: Record<string, any> = {}
+        // Actualizar registro existente con campos filtrados
+        const { error: updateError } = await supabaseAdmin.from(tableName).update(filteredRecord).eq("cue", cue)
 
-        Object.entries(record).forEach(([key, value]) => {
-          if (value !== null && value !== undefined && value !== "") {
-            updateData[key] = value
-          }
-        })
-
-        // Actualizar registro existente con campos no nulos
-        const { error } = await supabaseAdmin.from(tableName).update(updateData).eq("cue", cue)
-
-        if (error) throw error
-
-        updated++
+        if (updateError) {
+          console.warn(`Error al actualizar registro con CUE ${cue}:`, updateError)
+          errors.push(`Error al actualizar registro con CUE ${cue}: ${updateError.message}`)
+        } else {
+          updated++
+        }
       } else {
-        // Insertar nuevo registro
-        const { error } = await supabaseAdmin.from(tableName).insert([record])
+        // Insertar nuevo registro con campos filtrados
+        const { error: insertError } = await supabaseAdmin.from(tableName).insert([filteredRecord])
 
-        if (error) throw error
-
-        inserted++
+        if (insertError) {
+          console.warn(`Error al insertar registro con CUE ${cue}:`, insertError)
+          errors.push(`Error al insertar registro con CUE ${cue}: ${insertError.message}`)
+        } else {
+          inserted++
+        }
       }
     } catch (recordError) {
-      console.error(`Error al procesar registro:`, recordError, record)
+      console.error(`Error al procesar registro:`, recordError)
+      errors.push(
+        `Error al procesar registro: ${recordError instanceof Error ? recordError.message : "Error desconocido"}`,
+      )
       // Continuamos con el siguiente registro en caso de error
     }
   }
 
-  return { inserted, updated, addedColumns }
+  return { inserted, updated, skippedColumns, errors }
 }
 
 export async function POST(request: Request) {
@@ -319,7 +348,7 @@ export async function POST(request: Request) {
 
     // Procesar los datos
     const tableName = sheetName.toLowerCase()
-    const { inserted, updated, addedColumns } = await processData(tableName, sheetData)
+    const { inserted, updated, skippedColumns, errors } = await processData(tableName, sheetData)
 
     // Devolver respuesta
     return NextResponse.json({
@@ -327,7 +356,8 @@ export async function POST(request: Request) {
       processed: sheetData.length,
       inserted,
       updated,
-      addedColumns,
+      skippedColumns,
+      errors: errors.length > 0 ? errors : undefined,
       message: `Migración completada. ${inserted} registros insertados, ${updated} registros actualizados.`,
       timestamp: new Date().toISOString(),
     })

@@ -12,6 +12,8 @@ export default function SheetMigrationPanel({ authKey }: { authKey: string }) {
   const [error, setError] = useState<string | null>(null)
   const [recentMigrations, setRecentMigrations] = useState<any[]>([])
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showErrors, setShowErrors] = useState(false)
+  const [showSkippedColumns, setShowSkippedColumns] = useState(false)
 
   // Función para agregar un log con timestamp
   const addLog = (message: string) => {
@@ -29,7 +31,13 @@ export default function SheetMigrationPanel({ authKey }: { authKey: string }) {
 
       // Agregar mensaje informativo sobre las limitaciones actuales
       addLog("NOTA: En esta versión, solo se admiten las hojas 'establecimientos' y 'contactos'.")
-      addLog("Para migrar otras hojas, se requiere configurar la API key de Google Sheets.")
+      addLog("IMPORTANTE: La tabla debe existir previamente en la base de datos.")
+      addLog("CONSEJO: Los nombres de columnas se normalizan automáticamente (sin acentos, minúsculas, guiones bajos).")
+      addLog("MEJORA: Las columnas que no existen en la tabla se omitirán automáticamente.")
+      addLog(
+        "NUEVO: Los valores numéricos con comas (ej: 35,123) se convierten automáticamente al formato con punto (35.123).",
+      )
+      addLog("NUEVO: Los valores especiales como #N/A, #VALUE!, etc. se convierten automáticamente a NULL.")
     } catch (err) {
       console.error("Error al cargar migraciones recientes:", err)
     }
@@ -64,6 +72,8 @@ export default function SheetMigrationPanel({ authKey }: { authKey: string }) {
       setLoading(true)
       setError(null)
       setMigrationStatus(null)
+      setShowErrors(false)
+      setShowSkippedColumns(false)
       addLog(`Iniciando migración desde la hoja ${sheetId} a la tabla ${tableName}...`)
 
       // Usamos el authKey que recibimos como prop
@@ -90,8 +100,28 @@ export default function SheetMigrationPanel({ authKey }: { authKey: string }) {
         `Migración completada con éxito. ${data.inserted} registros insertados, ${data.updated} registros actualizados.`,
       )
 
-      if (data.addedColumns && data.addedColumns.length > 0) {
-        addLog(`Se agregaron ${data.addedColumns.length} columnas nuevas: ${data.addedColumns.join(", ")}`)
+      if (data.skippedColumns && data.skippedColumns.length > 0) {
+        addLog(`Se omitieron ${data.skippedColumns.length} columnas que no existen en la tabla.`)
+        // Mostrar las primeras 5 columnas omitidas en los logs
+        data.skippedColumns.slice(0, 5).forEach((column: string) => {
+          addLog(`COLUMNA OMITIDA: ${column}`)
+        })
+        if (data.skippedColumns.length > 5) {
+          addLog(
+            `... y ${data.skippedColumns.length - 5} columnas más. Haz clic en "Ver columnas omitidas" para ver todas.`,
+          )
+        }
+      }
+
+      if (data.errors && data.errors.length > 0) {
+        addLog(`Se encontraron ${data.errors.length} errores durante la migración.`)
+        // Mostrar los primeros 5 errores en los logs
+        data.errors.slice(0, 5).forEach((error: string) => {
+          addLog(`ERROR: ${error}`)
+        })
+        if (data.errors.length > 5) {
+          addLog(`... y ${data.errors.length - 5} errores más. Haz clic en "Ver errores" para ver todos.`)
+        }
       }
 
       // Guardar en el historial de migraciones recientes
@@ -103,7 +133,8 @@ export default function SheetMigrationPanel({ authKey }: { authKey: string }) {
         processed: data.processed,
         inserted: data.inserted,
         updated: data.updated,
-        addedColumns: data.addedColumns || [],
+        errors: data.errors?.length || 0,
+        skippedColumns: data.skippedColumns?.length || 0,
       })
     } catch (err) {
       console.error("Error durante la migración:", err)
@@ -122,8 +153,17 @@ export default function SheetMigrationPanel({ authKey }: { authKey: string }) {
       setMigrationStatus(null)
       setError(null)
       setLogs([])
+      setShowErrors(false)
+      setShowSkippedColumns(false)
       addLog("Formulario reiniciado")
       addLog("NOTA: En esta versión, solo se admiten las hojas 'establecimientos' y 'contactos'.")
+      addLog("IMPORTANTE: La tabla debe existir previamente en la base de datos.")
+      addLog("CONSEJO: Los nombres de columnas se normalizan automáticamente (sin acentos, minúsculas, guiones bajos).")
+      addLog("MEJORA: Las columnas que no existen en la tabla se omitirán automáticamente.")
+      addLog(
+        "NUEVO: Los valores numéricos con comas (ej: 35,123) se convierten automáticamente al formato con punto (35.123).",
+      )
+      addLog("NUEVO: Los valores especiales como #N/A, #VALUE!, etc. se convierten automáticamente a NULL.")
     }
   }
 
@@ -143,7 +183,7 @@ export default function SheetMigrationPanel({ authKey }: { authKey: string }) {
           <div className="ml-3">
             <p className="text-sm">
               <strong>Limitación actual:</strong> En esta versión, solo se admiten las hojas 'establecimientos' y
-              'contactos'. Para migrar otras hojas, se requiere configurar la API key de Google Sheets.
+              'contactos'. La tabla de destino debe existir previamente en la base de datos.
             </p>
           </div>
         </div>
@@ -254,19 +294,62 @@ export default function SheetMigrationPanel({ authKey }: { authKey: string }) {
               <span className="font-medium text-amber-400">{migrationStatus.updated || 0}</span>
             </div>
             <div>
-              <span className="text-white/70">Columnas nuevas:</span>{" "}
-              <span className="font-medium text-blue-400">{migrationStatus.addedColumns?.length || 0}</span>
+              <span className="text-white/70">Columnas omitidas:</span>{" "}
+              <span
+                className={`font-medium ${migrationStatus.skippedColumns?.length > 0 ? "text-blue-400" : "text-white"}`}
+              >
+                {migrationStatus.skippedColumns?.length || 0}
+              </span>
+              {migrationStatus.skippedColumns?.length > 0 && (
+                <button
+                  onClick={() => setShowSkippedColumns(!showSkippedColumns)}
+                  className="ml-2 text-xs text-blue-400 hover:text-blue-300"
+                >
+                  {showSkippedColumns ? "Ocultar" : "Ver columnas"}
+                </button>
+              )}
+            </div>
+            <div>
+              <span className="text-white/70">Errores:</span>{" "}
+              <span className={`font-medium ${migrationStatus.errors?.length > 0 ? "text-red-400" : "text-white"}`}>
+                {migrationStatus.errors?.length || 0}
+              </span>
+              {migrationStatus.errors?.length > 0 && (
+                <button
+                  onClick={() => setShowErrors(!showErrors)}
+                  className="ml-2 text-xs text-blue-400 hover:text-blue-300"
+                >
+                  {showErrors ? "Ocultar" : "Ver errores"}
+                </button>
+              )}
             </div>
           </div>
 
-          {migrationStatus.addedColumns && migrationStatus.addedColumns.length > 0 && (
+          {/* Mostrar columnas omitidas */}
+          {showSkippedColumns && migrationStatus.skippedColumns && migrationStatus.skippedColumns.length > 0 && (
             <div className="mt-3 bg-blue-900/20 p-2 rounded border border-blue-500/30 text-xs">
-              <div className="font-medium text-blue-300 mb-1">Columnas agregadas:</div>
-              <div className="flex flex-wrap gap-1">
-                {migrationStatus.addedColumns.map((column: string, index: number) => (
-                  <span key={index} className="bg-blue-800/50 px-2 py-1 rounded text-blue-200">
-                    {column}
-                  </span>
+              <div className="font-medium text-blue-300 mb-1">Columnas omitidas (no existen en la tabla):</div>
+              <div className="max-h-40 overflow-y-auto">
+                <div className="flex flex-wrap gap-1">
+                  {migrationStatus.skippedColumns.map((column: string, index: number) => (
+                    <span key={index} className="bg-blue-800/50 px-2 py-1 rounded text-blue-200">
+                      {column}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Mostrar errores */}
+          {showErrors && migrationStatus.errors && migrationStatus.errors.length > 0 && (
+            <div className="mt-3 bg-red-900/20 p-2 rounded border border-red-500/30 text-xs">
+              <div className="font-medium text-red-300 mb-1">Errores encontrados:</div>
+              <div className="max-h-40 overflow-y-auto">
+                {migrationStatus.errors.map((error: string, index: number) => (
+                  <div key={index} className="bg-red-800/50 px-2 py-1 rounded text-red-200 mb-1">
+                    {error}
+                  </div>
                 ))}
               </div>
             </div>
@@ -316,10 +399,16 @@ export default function SheetMigrationPanel({ authKey }: { authKey: string }) {
                           <span className="text-green-400">{migration.inserted} ins</span>
                           <span className="text-white/50">|</span>
                           <span className="text-amber-400">{migration.updated} act</span>
-                          {migration.addedColumns.length > 0 && (
+                          {migration.skippedColumns > 0 && (
                             <>
                               <span className="text-white/50">|</span>
-                              <span className="text-blue-400">{migration.addedColumns.length} cols</span>
+                              <span className="text-blue-400">{migration.skippedColumns} col</span>
+                            </>
+                          )}
+                          {migration.errors > 0 && (
+                            <>
+                              <span className="text-white/50">|</span>
+                              <span className="text-red-400">{migration.errors} err</span>
                             </>
                           )}
                         </div>
@@ -361,16 +450,19 @@ export default function SheetMigrationPanel({ authKey }: { authKey: string }) {
           </p>
           <p className="mb-2">
             <strong>Limitación actual:</strong> En esta versión, solo se admiten las hojas 'establecimientos' y
-            'contactos'.
+            'contactos'. La tabla de destino debe existir previamente en la base de datos.
           </p>
           <p className="mb-2">
             <strong>Características principales:</strong>
           </p>
           <ul className="list-disc pl-5 space-y-1">
-            <li>Normaliza automáticamente los nombres de columnas (minúsculas, guiones bajos)</li>
-            <li>Agrega columnas nuevas si no existen en la tabla de destino</li>
+            <li>Normaliza automáticamente los nombres de columnas (minúsculas, sin acentos, guiones bajos)</li>
+            <li>Filtra automáticamente las columnas que no existen en la tabla de destino</li>
+            <li>Convierte valores numéricos con comas a formato con punto (ej: 35,123 → 35.123)</li>
+            <li>Convierte valores especiales (#N/A, #VALUE!, etc.) a NULL</li>
             <li>Actualiza registros existentes (por CUE) sin sobrescribir con valores nulos</li>
             <li>Inserta registros nuevos que no existen en la base de datos</li>
+            <li>Registra y muestra errores y columnas omitidas para facilitar la depuración</li>
           </ul>
         </div>
       </div>

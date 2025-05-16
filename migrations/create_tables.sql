@@ -4,10 +4,11 @@ RETURNS void AS $$
 BEGIN
   -- Verificar si la tabla establecimientos existe
   IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'establecimientos') THEN
-    -- Crear la tabla establecimientos con todos los campos necesarios
+    -- Crear tabla establecimientos si no existe
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     CREATE TABLE establecimientos (
-      id UUID PRIMARY KEY,
-      cue INTEGER,
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      cue TEXT,
       nombre TEXT,
       distrito TEXT,
       ciudad TEXT,
@@ -69,10 +70,11 @@ BEGIN
 
   -- Verificar si la tabla contactos existe
   IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'contactos') THEN
-    -- Crear la tabla contactos
+    -- Crear tabla contactos si no existe
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     CREATE TABLE contactos (
-      id UUID PRIMARY KEY,
-      cue INTEGER,
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      cue TEXT,
       nombre TEXT,
       apellido TEXT,
       correo TEXT,
