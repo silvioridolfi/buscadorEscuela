@@ -9,6 +9,7 @@ import Image from "next/image"
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [authToken, setAuthToken] = useState<string | null>(null)
 
   // Verificar si hay un token guardado al cargar la página
   useEffect(() => {
@@ -23,6 +24,7 @@ export default function AdminPage() {
 
   // Verificar el token con el servidor
   const verifyToken = async (token: string) => {
+    setIsLoading(true)
     try {
       const response = await fetch("/api/admin/verify", {
         method: "POST",
@@ -34,14 +36,17 @@ export default function AdminPage() {
 
       if (response.ok) {
         setIsAuthenticated(true)
+        setAuthToken(token)
       } else {
         // Token inválido, eliminar del almacenamiento local
         localStorage.removeItem("adminToken")
         setIsAuthenticated(false)
+        setAuthToken(null)
       }
     } catch (error) {
       console.error("Error al verificar el token:", error)
       setIsAuthenticated(false)
+      setAuthToken(null)
     } finally {
       setIsLoading(false)
     }
@@ -63,6 +68,7 @@ export default function AdminPage() {
         // Guardar el token en el almacenamiento local
         localStorage.setItem("adminToken", data.token)
         setIsAuthenticated(true)
+        setAuthToken(data.token)
         return true
       }
       return false
@@ -76,6 +82,7 @@ export default function AdminPage() {
   const handleLogout = () => {
     localStorage.removeItem("adminToken")
     setIsAuthenticated(false)
+    setAuthToken(null)
   }
 
   if (isLoading) {
@@ -112,7 +119,11 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {isAuthenticated ? <AdminPanel onLogout={handleLogout} /> : <AdminLogin onLogin={handleLogin} />}
+      {isAuthenticated ? (
+        <AdminPanel onLogout={handleLogout} authKey={authToken || ""} />
+      ) : (
+        <AdminLogin onLogin={handleLogin} />
+      )}
 
       <div className="mt-8 text-center text-white/50 text-xs">
         © {new Date().getFullYear()} Dirección de Tecnología Educativa

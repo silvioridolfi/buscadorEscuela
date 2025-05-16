@@ -1,859 +1,360 @@
 "use client"
+
+import type React from "react"
+
+import { useEffect, useRef, useState } from "react"
 import {
-  X,
-  AlertTriangle,
   MapPin,
-  School,
-  Building,
-  Hash,
-  MapIcon,
-  User,
   Phone,
+  User,
+  Building,
+  School,
+  X,
   Mail,
   Calendar,
   Wifi,
   Info,
   ExternalLink,
-  ArrowLeft,
-  Loader2,
   ChevronDown,
   ChevronUp,
 } from "lucide-react"
-import type { SharedPredioInfo } from "./SchoolSearch"
-import SchoolMap from "./SchoolMap"
-import { useState, useEffect } from "react"
-import { createPortal } from "react-dom"
-import { getAbbreviatedSchoolName } from "@/lib/school-utils"
-
-interface SchoolInfo {
-  CUE: string
-  PREDIO: string
-  ESTABLECIMIENTO: string
-  FED_A_CARGO: string
-  DISTRITO: string
-  CIUDAD: string
-  DIRECCION: string
-  PLAN_ENLACE: string
-  SUBPLAN_ENLACE: string
-  FECHA_INICIO_CONECTIVIDAD: string
-  PROVEEDOR_INTERNET_PNCE: string
-  FECHA_INSTALACION_PNCE: string
-  PNCE_TIPO_MEJORA: string
-  PNCE_FECHA_MEJORA: string
-  PNCE_ESTADO: string
-  PBA_GRUPO_1_PROVEEDOR_INTERNET: string
-  PBA_GRUPO_1_FECHA_INSTALACION: string
-  PBA_GRUPO_1_ESTADO: string
-  PBA_2019_PROVEEDOR_INTERNET: string
-  PBA_2019_FECHA_INSTALACION: string
-  PBA_2019_ESTADO: string
-  PBA_GRUPO_2_A_PROVEEDOR_INTERNET: string
-  PBA_GRUPO_2_A_FECHA_INSTALACION: string
-  PBA_GRUPO_2_A_TIPO_MEJORA: string
-  PBA_GRUPO_2_A_FECHA_MEJORA: string
-  PBA_GRUPO_2_A_ESTADO: string
-  PLAN_PISO_TECNOLOGICO: string
-  PROVEEDOR_PISO_TECNOLOGICO_CUE: string
-  FECHA_TERMINADO_PISO_TECNOLOGICO_CUE: string
-  TIPO_MEJORA: string
-  FECHA_MEJORA: string
-  TIPO_PISO_INSTALADO: string
-  TIPO: string
-  OBSERVACIONES: string
-  TIPO_ESTABLECIMIENTO: string
-  LISTADO_CONEXION_INTERNET: string
-  ESTADO_INSTALACION_PBA: string
-  PROVEEDOR_ASIGNADO_PBA: string
-  MB: string
-  AMBITO: string
-  CUE_ANTERIOR: string
-  RECLAMOS_GRUPO_1_ANI: string
-  RECURSO_PRIMARIO: string
-  ACCESS_ID: string
-  LAT: string
-  LON: string
-  NOMBRE: string
-  APELLIDO: string
-  CARGO: string
-  TELEFONO: string
-  CORREO_INSTITUCIONAL: string
-}
 
 interface DetailedInfoModalProps {
-  school: SchoolInfo
-  isOpen: boolean
+  school: any
   onClose: () => void
-  sharedPredioInfo?: SharedPredioInfo
-  onSearchByCUE?: (cue: string) => void
 }
 
-export default function DetailedInfoModal({
-  school: initialSchool,
-  isOpen,
-  onClose,
-  sharedPredioInfo,
-  onSearchByCUE,
-}: DetailedInfoModalProps) {
-  const [activeTab, setActiveTab] = useState<"info" | "map">("info")
-  const [mounted, setMounted] = useState(false)
-  const [currentSchool, setCurrentSchool] = useState<SchoolInfo>(initialSchool)
-  const [schoolHistory, setSchoolHistory] = useState<SchoolInfo[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [currentSharedPredioInfo, setCurrentSharedPredioInfo] = useState<SharedPredioInfo | undefined>(sharedPredioInfo)
+export default function DetailedInfoModal({ school, onClose }: DetailedInfoModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null)
+  const [activeSection, setActiveSection] = useState<string>("basic")
 
-  // Estados para secciones colapsables en móvil
-  const [activeSection, setActiveSection] = useState<"basic" | "contact" | "technical" | "sharedPredio" | null>("basic")
-
-  // Detectar si estamos en móvil
-  const [isMobile, setIsMobile] = useState(false)
-
+  // Cerrar modal al hacer clic fuera o presionar ESC
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768)
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
+        onClose()
+      }
     }
 
-    checkMobile()
-    window.addEventListener("resize", checkMobile)
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    document.addEventListener("keydown", handleEscKey)
+
+    // Bloquear scroll del body
+    document.body.style.overflow = "hidden"
 
     return () => {
-      window.removeEventListener("resize", checkMobile)
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("keydown", handleEscKey)
+      document.body.style.overflow = "auto"
     }
-  }, [isOpen])
+  }, [onClose])
 
-  // Only mount the portal after the component is mounted on the client
-  useEffect(() => {
-    setMounted(true)
+  // Verificar si hay coordenadas válidas
+  const hasValidCoordinates =
+    school.LAT &&
+    school.LON &&
+    !isNaN(Number.parseFloat(school.LAT)) &&
+    !isNaN(Number.parseFloat(school.LON)) &&
+    Number.parseFloat(school.LAT) !== 0 &&
+    Number.parseFloat(school.LON) !== 0
 
-    // Lock body scroll when modal is open
-    if (isOpen) {
-      document.body.style.overflow = "hidden"
-    }
+  // Generar URL de Google Maps
+  const googleMapsUrl = hasValidCoordinates
+    ? `https://www.google.com/maps?q=${Number.parseFloat(school.LAT)},${Number.parseFloat(school.LON)}`
+    : `https://www.google.com/maps/search/${encodeURIComponent(
+        `${school.ESTABLECIMIENTO} ${school.DIRECCION} ${school.CIUDAD} ${school.DISTRITO}`,
+      )}`
 
-    return () => {
-      document.body.style.overflow = ""
-    }
-  }, [isOpen])
-
-  // Reset current school when initial school changes
-  useEffect(() => {
-    setCurrentSchool(initialSchool)
-    setSchoolHistory([])
-    setCurrentSharedPredioInfo(sharedPredioInfo)
-    // Establecer la sección básica como activa por defecto
-    setActiveSection("basic")
-  }, [initialSchool, sharedPredioInfo])
-
-  // Function to toggle section expansion - modificada para que solo una sección esté activa a la vez
-  const toggleSection = (section: "basic" | "contact" | "technical" | "sharedPredio") => {
-    // Añadir un pequeño retraso si estamos cerrando una sección y abriendo otra
-    if (activeSection && activeSection !== section) {
-      setActiveSection(null)
-      setTimeout(() => {
-        setActiveSection(section)
-      }, 50)
-    } else {
-      setActiveSection(activeSection === section ? null : section)
-    }
-  }
-
-  // Modificar la función fetchSchoolByCUE para usar la API de Supabase
-  const fetchSchoolByCUE = async (cue: string) => {
-    setLoading(true)
-    setError(null)
-
-    try {
-      // Add timestamp to URL to bypass cache
-      const timestamp = Date.now()
-      // Cambiar la URL para usar la API de Supabase
-      const url = `/api/search/supabase?query=${encodeURIComponent(cue)}&_t=${timestamp}`
-
-      const response = await fetch(url, {
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
+  // Función para agrupar campos relacionados
+  const groupFields = () => {
+    const groups = {
+      basic: [
+        { key: "CUE", label: "CUE", icon: <School className="w-4 h-4" /> },
+        { key: "ESTABLECIMIENTO", label: "Nombre", icon: <Building className="w-4 h-4" /> },
+        { key: "TIPO_ESTABLECIMIENTO", label: "Tipo", icon: null },
+        { key: "FED_A_CARGO", label: "Fed. a cargo", icon: null },
+        { key: "DIRECCION", label: "Dirección", icon: <MapPin className="w-4 h-4" /> },
+        { key: "CIUDAD", label: "Ciudad", icon: null },
+        { key: "DISTRITO", label: "Distrito", icon: null },
+        { key: "AMBITO", label: "Ámbito", icon: null },
+      ],
+      contact: [
+        { key: "NOMBRE", label: "Nombre", icon: <User className="w-4 h-4" /> },
+        { key: "APELLIDO", label: "Apellido", icon: null },
+        { key: "CARGO", label: "Cargo", icon: null },
+        { key: "TELEFONO", label: "Teléfono", icon: <Phone className="w-4 h-4" /> },
+        { key: "CORREO_INSTITUCIONAL", label: "Correo", icon: <Mail className="w-4 h-4" /> },
+      ],
+      connectivity: [
+        { key: "PLAN_ENLACE", label: "Plan Enlace", icon: <Wifi className="w-4 h-4" /> },
+        { key: "SUBPLAN_ENLACE", label: "Subplan Enlace", icon: null },
+        {
+          key: "FECHA_INICIO_CONECTIVIDAD",
+          label: "Fecha inicio conectividad",
+          icon: <Calendar className="w-4 h-4" />,
         },
-      })
-
-      if (!response.ok) {
-        throw new Error(`Error al obtener datos de la escuela: ${response.status}`)
-      }
-
-      const data = await response.json()
-
-      if (!data || data.length === 0) {
-        throw new Error(`No se encontró información para el CUE: ${cue}`)
-      }
-
-      // Get the first result (should be exact match by CUE)
-      const schoolData = data[0]
-
-      // Save current school to history before changing
-      setSchoolHistory((prev) => [...prev, currentSchool])
-
-      // Update current school
-      setCurrentSchool(schoolData)
-
-      // Fetch shared PREDIO info for the new school
-      await fetchSharedPredioInfo(schoolData.PREDIO, schoolData.CUE)
-
-      // Establecer la sección básica como activa al cambiar de escuela
-      setActiveSection("basic")
-    } catch (error) {
-      console.error("Error fetching school by CUE:", error)
-      setError(error.message || "Error al cargar la información de la escuela")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Modificar la función fetchSharedPredioInfo para usar la API de Supabase
-  const fetchSharedPredioInfo = async (predio: string, cue: string) => {
-    if (!predio) {
-      setCurrentSharedPredioInfo(undefined)
-      return
-    }
-
-    try {
-      // Add timestamp to URL to bypass cache
-      const timestamp = Date.now()
-      // Cambiar la URL para usar la API de Supabase
-      const url = `/api/schools-by-predio/supabase?predio=${encodeURIComponent(predio)}&_t=${timestamp}`
-
-      const response = await fetch(url, {
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
+        { key: "PROVEEDOR_INTERNET_PNCE", label: "Proveedor PNCE", icon: null },
+        { key: "FECHA_INSTALACION_PNCE", label: "Fecha instalación PNCE", icon: <Calendar className="w-4 h-4" /> },
+        { key: "PNCE_ESTADO", label: "Estado PNCE", icon: null },
+        { key: "PBA_GRUPO_1_PROVEEDOR_INTERNET", label: "Proveedor PBA G1", icon: null },
+        {
+          key: "PBA_GRUPO_1_FECHA_INSTALACION",
+          label: "Fecha instalación PBA G1",
+          icon: <Calendar className="w-4 h-4" />,
         },
-      })
-
-      if (!response.ok) {
-        throw new Error(`Error al obtener información de PREDIO compartido: ${response.status}`)
-      }
-
-      const data = await response.json()
-      const schools = data.schools || []
-
-      if (schools.length > 1) {
-        // This PREDIO is shared by multiple schools
-        const newSharedPredioInfo: SharedPredioInfo = {
-          isShared: true,
-          predio: predio,
-          sharedWith: schools
-            .filter((s: SchoolInfo) => s.CUE !== cue)
-            .map((s: SchoolInfo) => ({
-              CUE: s.CUE,
-              ESTABLECIMIENTO: s.ESTABLECIMIENTO,
-            })),
-        }
-        setCurrentSharedPredioInfo(newSharedPredioInfo)
-      } else {
-        setCurrentSharedPredioInfo(undefined)
-      }
-    } catch (error) {
-      console.error("Error fetching shared PREDIO info:", error)
-      setCurrentSharedPredioInfo(undefined)
+        { key: "PBA_GRUPO_1_ESTADO", label: "Estado PBA G1", icon: null },
+        { key: "MB", label: "Ancho de banda", icon: null },
+      ],
+      technical: [
+        { key: "PLAN_PISO_TECNOLOGICO", label: "Plan piso tecnológico", icon: <Info className="w-4 h-4" /> },
+        { key: "TIPO_PISO_INSTALADO", label: "Tipo piso instalado", icon: null },
+        { key: "PROVEEDOR_PISO_TECNOLOGICO_CUE", label: "Proveedor piso tecnológico", icon: null },
+        {
+          key: "FECHA_TERMINADO_PISO_TECNOLOGICO_CUE",
+          label: "Fecha terminado",
+          icon: <Calendar className="w-4 h-4" />,
+        },
+        { key: "TIPO_MEJORA", label: "Tipo mejora", icon: null },
+        { key: "FECHA_MEJORA", label: "Fecha mejora", icon: <Calendar className="w-4 h-4" /> },
+      ],
+      other: [
+        { key: "PREDIO", label: "Predio", icon: <Building className="w-4 h-4" /> },
+        { key: "OBSERVACIONES", label: "Observaciones", icon: <Info className="w-4 h-4" /> },
+        { key: "CUE_ANTERIOR", label: "CUE anterior", icon: null },
+        { key: "ACCESS_ID", label: "Access ID", icon: null },
+      ],
     }
+
+    return groups
   }
 
-  // Handle click on a shared school CUE
-  const handleCUEClick = (cue: string) => {
-    fetchSchoolByCUE(cue)
-  }
+  const fieldGroups = groupFields()
 
-  // Handle going back to previous school
-  const handleGoBack = () => {
-    if (schoolHistory.length > 0) {
-      const previousSchool = schoolHistory[schoolHistory.length - 1]
-      setCurrentSchool(previousSchool)
-      setSchoolHistory((prev) => prev.slice(0, -1))
+  // Función para renderizar un grupo de campos
+  const renderFieldGroup = (group: Array<{ key: string; label: string; icon: React.ReactNode }>) => {
+    return group.map((field) => {
+      const value = school[field.key]
+      if (!value) return null
 
-      // If we have onSearchByCUE, use it to update shared PREDIO info
-      if (onSearchByCUE) {
-        fetchSharedPredioInfo(previousSchool.PREDIO, previousSchool.CUE)
-      }
-    }
-  }
-
-  if (!isOpen || !mounted) return null
-
-  const hasSharedPredio = currentSharedPredioInfo?.isShared
-  const hasLocation =
-    currentSchool.LAT &&
-    currentSchool.LON &&
-    currentSchool.LAT !== "0" &&
-    currentSchool.LON !== "0" &&
-    currentSchool.LAT.trim() !== "" &&
-    currentSchool.LON.trim() !== ""
-
-  // Determine school type for icon
-  const getSchoolTypeIcon = () => {
-    const name = currentSchool.ESTABLECIMIENTO.toLowerCase()
-    if (name.includes("jardin") || name.includes("inicial")) {
-      return <School className="w-6 h-6 text-white" />
-    } else if (name.includes("primaria")) {
-      return <School className="w-6 h-6 text-white" />
-    } else if (name.includes("secundaria") || name.includes("tecnica")) {
-      return <School className="w-6 h-6 text-white" />
-    } else {
-      return <Building className="w-6 h-6 text-white" />
-    }
-  }
-
-  // Función para mostrar el nombre según el dispositivo
-  const getDisplayName = () => {
-    return (
-      <>
-        <span className="md:hidden">{getAbbreviatedSchoolName(currentSchool.ESTABLECIMIENTO)}</span>
-        <span className="hidden md:block">{currentSchool.ESTABLECIMIENTO}</span>
-      </>
-    )
-  }
-
-  // Group the data into categories for better organization
-  const basicInfo = [
-    { label: "CUE", value: currentSchool.CUE, icon: <Hash className="w-4 h-4" /> },
-    { label: "ESTABLECIMIENTO", value: currentSchool.ESTABLECIMIENTO, icon: <School className="w-4 h-4" /> },
-    { label: "PREDIO", value: currentSchool.PREDIO, icon: <Building className="w-4 h-4" /> },
-    { label: "FED A CARGO", value: currentSchool.FED_A_CARGO, icon: <User className="w-4 h-4" />, isBold: true },
-    { label: "DISTRITO", value: currentSchool.DISTRITO, icon: <MapIcon className="w-4 h-4" />, isBold: true },
-    { label: "CIUDAD", value: currentSchool.CIUDAD, icon: <MapIcon className="w-4 h-4" /> },
-    { label: "DIRECCIÓN", value: currentSchool.DIRECCION, icon: <MapPin className="w-4 h-4" /> },
-  ]
-
-  const contactInfo = [
-    { label: "NOMBRE", value: currentSchool.NOMBRE || "Sin datos", icon: <User className="w-4 h-4" /> },
-    { label: "APELLIDO", value: currentSchool.APELLIDO || "Sin datos", icon: <User className="w-4 h-4" /> },
-    { label: "CARGO", value: currentSchool.CARGO || "Sin datos", icon: <User className="w-4 h-4" /> },
-    { label: "TELÉFONO", value: currentSchool.TELEFONO || "Sin datos", icon: <Phone className="w-4 h-4" /> },
-    {
-      label: "CORREO INSTITUCIONAL",
-      value: currentSchool.CORREO_INSTITUCIONAL || "Sin datos",
-      icon: <Mail className="w-4 h-4" />,
-    },
-  ]
-
-  // Comprehensive technical information - excluding LAT and LON
-  const technicalInfo = [
-    { label: "PLAN ENLACE", value: currentSchool.PLAN_ENLACE, icon: <Wifi className="w-4 h-4" /> },
-    { label: "SUBPLAN ENLACE", value: currentSchool.SUBPLAN_ENLACE, icon: <Wifi className="w-4 h-4" /> },
-    {
-      label: "FECHA INICIO CONECTIVIDAD",
-      value: currentSchool.FECHA_INICIO_CONECTIVIDAD,
-      icon: <Calendar className="w-4 h-4" />,
-    },
-    {
-      label: "PROVEEDOR INTERNET PNCE",
-      value: currentSchool.PROVEEDOR_INTERNET_PNCE,
-      icon: <Wifi className="w-4 h-4" />,
-    },
-    {
-      label: "FECHA INSTALACIÓN PNCE",
-      value: currentSchool.FECHA_INSTALACION_PNCE,
-      icon: <Calendar className="w-4 h-4" />,
-    },
-    { label: "PNCE TIPO DE MEJORA", value: currentSchool.PNCE_TIPO_MEJORA, icon: <Info className="w-4 h-4" /> },
-    { label: "PNCE FECHA DE MEJORA", value: currentSchool.PNCE_FECHA_MEJORA, icon: <Calendar className="w-4 h-4" /> },
-    { label: "PNCE ESTADO", value: currentSchool.PNCE_ESTADO, icon: <Info className="w-4 h-4" /> },
-    {
-      label: "PBA - GRUPO 1 PROVEEDOR INTERNET",
-      value: currentSchool.PBA_GRUPO_1_PROVEEDOR_INTERNET,
-      icon: <Wifi className="w-4 h-4" />,
-    },
-    {
-      label: "PBA - GRUPO 1 FECHA INSTALACIÓN",
-      value: currentSchool.PBA_GRUPO_1_FECHA_INSTALACION,
-      icon: <Calendar className="w-4 h-4" />,
-    },
-    { label: "PBA - GRUPO 1 ESTADO", value: currentSchool.PBA_GRUPO_1_ESTADO, icon: <Info className="w-4 h-4" /> },
-    {
-      label: "PBA 2019 PROVEEDOR INTERNET",
-      value: currentSchool.PBA_2019_PROVEEDOR_INTERNET,
-      icon: <Wifi className="w-4 h-4" />,
-    },
-    {
-      label: "PBA 2019 FECHA INSTALACIÓN",
-      value: currentSchool.PBA_2019_FECHA_INSTALACION,
-      icon: <Calendar className="w-4 h-4" />,
-    },
-    { label: "PBA 2019 ESTADO", value: currentSchool.PBA_2019_ESTADO, icon: <Info className="w-4 h-4" /> },
-    {
-      label: "PBA - GRUPO 2 - A PROVEEDOR INTERNET",
-      value: currentSchool.PBA_GRUPO_2_A_PROVEEDOR_INTERNET,
-      icon: <Wifi className="w-4 h-4" />,
-    },
-    {
-      label: "PBA - GRUPO 2 - A FECHA INSTALACIÓN",
-      value: currentSchool.PBA_GRUPO_2_A_FECHA_INSTALACION,
-      icon: <Calendar className="w-4 h-4" />,
-    },
-    {
-      label: "PBA - GRUPO 2 - A TIPO DE MEJORA",
-      value: currentSchool.PBA_GRUPO_2_A_TIPO_MEJORA,
-      icon: <Info className="w-4 h-4" />,
-    },
-    {
-      label: "PBA - GRUPO 2 - A FECHA DE MEJORA",
-      value: currentSchool.PBA_GRUPO_2_A_FECHA_MEJORA,
-      icon: <Calendar className="w-4 h-4" />,
-    },
-    {
-      label: "PBA - GRUPO 2 - A ESTADO",
-      value: currentSchool.PBA_GRUPO_2_A_ESTADO,
-      icon: <Info className="w-4 h-4" />,
-    },
-    { label: "PLAN PISO TECNOLÓGICO", value: currentSchool.PLAN_PISO_TECNOLOGICO, icon: <Info className="w-4 h-4" /> },
-    {
-      label: "PROVEEDOR PISO TECNOLÓGICO CUE",
-      value: currentSchool.PROVEEDOR_PISO_TECNOLOGICO_CUE,
-      icon: <Info className="w-4 h-4" />,
-    },
-    {
-      label: "FECHA TERMINADO PISO TECNOLÓGICO CUE",
-      value: currentSchool.FECHA_TERMINADO_PISO_TECNOLOGICO_CUE,
-      icon: <Calendar className="w-4 h-4" />,
-    },
-    { label: "TIPO DE MEJORA", value: currentSchool.TIPO_MEJORA, icon: <Info className="w-4 h-4" /> },
-    { label: "FECHA DE MEJORA", value: currentSchool.FECHA_MEJORA, icon: <Calendar className="w-4 h-4" /> },
-    { label: "TIPO DE PISO INSTALADO", value: currentSchool.TIPO_PISO_INSTALADO, icon: <Info className="w-4 h-4" /> },
-    { label: "TIPO", value: currentSchool.TIPO, icon: <Info className="w-4 h-4" /> },
-    { label: "OBSERVACIONES", value: currentSchool.OBSERVACIONES, icon: <Info className="w-4 h-4" /> },
-    {
-      label: "TIPO DE ESTABLECIMIENTO",
-      value: currentSchool.TIPO_ESTABLECIMIENTO,
-      icon: <School className="w-4 h-4" />,
-    },
-    {
-      label: "LISTADO POR EL QUE SE CONECTA INTERNET",
-      value: currentSchool.LISTADO_CONEXION_INTERNET,
-      icon: <Wifi className="w-4 h-4" />,
-    },
-    {
-      label: "ESTADO DE INSTALACIÓN PBA",
-      value: currentSchool.ESTADO_INSTALACION_PBA,
-      icon: <Info className="w-4 h-4" />,
-    },
-    {
-      label: "PROVEEDOR ASIGNADO PBA",
-      value: currentSchool.PROVEEDOR_ASIGNADO_PBA,
-      icon: <Wifi className="w-4 h-4" />,
-    },
-    { label: "MB", value: currentSchool.MB, icon: <Wifi className="w-4 h-4" /> },
-    { label: "ÁMBITO", value: currentSchool.AMBITO, icon: <Info className="w-4 h-4" /> },
-    { label: "CUE ANTERIOR", value: currentSchool.CUE_ANTERIOR, icon: <Hash className="w-4 h-4" /> },
-    { label: "RECLAMOS GRUPO 1 ANI", value: currentSchool.RECLAMOS_GRUPO_1_ANI, icon: <Info className="w-4 h-4" /> },
-    { label: "RECURSO PRIMARIO", value: currentSchool.RECURSO_PRIMARIO, icon: <Info className="w-4 h-4" /> },
-    { label: "Access ID", value: currentSchool.ACCESS_ID, icon: <Hash className="w-4 h-4" /> },
-  ]
-
-  // Filter out empty values from technical info
-  const filteredTechnicalInfo = technicalInfo.filter((item) => item.value)
-
-  // Solo renderizar el portal si estamos en el cliente y el componente está montado
-  if (typeof window === "undefined" || !mounted) return null
-
-  // Use createPortal to render the modal outside of the component hierarchy
-  return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center" onClick={onClose}>
-      {/* Backdrop with blur effect */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
-
-      {/* Modal Content - Ahora a pantalla completa */}
-      <div
-        className="relative bg-gradient-to-br from-gray-900 to-gray-800 w-full h-full md:h-full overflow-hidden flex flex-col border-0 md:border md:border-white/10"
-        onClick={(e) => e.stopPropagation()} // Prevent clicks from closing the modal
-      >
-        {/* Header with gradient background */}
-        <div className="p-5 md:p-6 bg-gradient-to-r from-primary via-secondary to-accent flex justify-between items-center sticky top-0 z-10">
-          {/* Efecto de resplandor en el fondo */}
-          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-white/20 to-transparent opacity-30"></div>
-
-          <div className="flex items-center gap-3 relative z-10">
-            {schoolHistory.length > 0 && (
-              <button
-                onClick={handleGoBack}
-                className="bg-white/20 p-2.5 rounded-xl backdrop-blur-sm hover:bg-white/30 transition-colors flex-shrink-0 shadow-lg"
-                title="Volver a la escuela anterior"
-              >
-                <ArrowLeft className="w-5 h-5 text-white" />
-              </button>
-            )}
-            <div className="bg-white/20 p-2.5 rounded-xl backdrop-blur-sm flex-shrink-0 shadow-lg">
-              {getSchoolTypeIcon()}
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-lg md:text-2xl font-bold text-white">{getDisplayName()}</h2>
-              <div className="flex flex-wrap items-center gap-2 mt-2">
-                <span className="bg-white/20 px-3 py-1 rounded-full backdrop-blur-sm text-white text-xs md:text-sm flex items-center shadow-sm">
-                  <Hash className="w-3 h-3 mr-1" />
-                  CUE: {currentSchool.CUE}
-                </span>
-                {hasSharedPredio && (
-                  <span className="bg-amber-500/80 px-3 py-1 rounded-full backdrop-blur-sm text-white text-xs md:text-sm flex items-center shadow-sm">
-                    <AlertTriangle className="w-3 h-3 mr-1" />
-                    Predio Compartido
-                  </span>
-                )}
-              </div>
-            </div>
+      return (
+        <div key={field.key} className="mb-2">
+          <div className="flex items-center text-white/70 text-sm">
+            {field.icon && <span className="mr-1 text-white/50">{field.icon}</span>}
+            <span>{field.label}:</span>
           </div>
-          <button
-            onClick={onClose}
-            className="text-white hover:bg-white/20 rounded-full p-2.5 transition-colors flex-shrink-0 relative z-10"
-            aria-label="Cerrar"
-          >
-            <X className="w-5 h-5 md:w-6 md:h-6" />
+          <div className="text-white ml-6">
+            {field.key === "CORREO_INSTITUCIONAL" ? (
+              <a href={`mailto:${value}`} className="text-primary hover:underline flex items-center">
+                {value}
+                <ExternalLink className="w-3 h-3 ml-1" />
+              </a>
+            ) : field.key === "TELEFONO" ? (
+              <a href={`tel:${value}`} className="text-primary hover:underline flex items-center">
+                {value}
+                <ExternalLink className="w-3 h-3 ml-1" />
+              </a>
+            ) : (
+              value
+            )}
+          </div>
+        </div>
+      )
+    })
+  }
+
+  // Función para alternar secciones
+  const toggleSection = (section: string) => {
+    setActiveSection(activeSection === section ? "" : section)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div
+        ref={modalRef}
+        className="bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col border border-white/10"
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-primary to-secondary p-4 flex justify-between items-center sticky top-0 z-10">
+          <h2 className="text-xl font-bold text-white">{school.ESTABLECIMIENTO}</h2>
+          <button onClick={onClose} className="text-white hover:bg-white/20 rounded-full p-1" aria-label="Cerrar">
+            <X className="w-6 h-6" />
           </button>
         </div>
 
-        {/* Loading overlay */}
-        {loading && (
-          <div className="absolute inset-0 bg-gray-900/80 flex items-center justify-center z-50 backdrop-blur-sm">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="w-12 h-12 text-primary animate-spin" />
-              <p className="text-white font-medium">Cargando información...</p>
-            </div>
-          </div>
-        )}
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {/* Sección básica */}
+          <div className="mb-6">
+            <button
+              onClick={() => toggleSection("basic")}
+              className="flex items-center justify-between w-full text-white font-bold text-lg mb-2"
+            >
+              <span className="flex items-center">
+                <Building className="w-5 h-5 mr-2" />
+                Información Básica
+              </span>
+              {activeSection === "basic" ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
 
-        {/* Error message */}
-        {error && (
-          <div className="p-4 bg-red-900/50 border-b border-red-500/30 backdrop-blur-sm">
-            <div className="flex items-start gap-2 text-red-200">
-              <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 text-red-400" />
-              <div>
-                <p className="font-medium">Error al cargar la información</p>
-                <p className="text-sm opacity-90">{error}</p>
-              </div>
-            </div>
-          </div>
-        )}
+            {activeSection === "basic" && (
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                {renderFieldGroup(fieldGroups.basic)}
 
-        {/* Tabs for navigation */}
-        {hasLocation && (
-          <div className="bg-gray-800 border-b border-white/10 z-10 relative">
-            <div className="flex">
-              <button
-                onClick={() => setActiveTab("info")}
-                className={`px-5 py-3 font-medium text-sm flex items-center gap-2 ${
-                  activeTab === "info"
-                    ? "bg-gray-900 text-primary border-b-2 border-primary"
-                    : "text-white/70 hover:bg-gray-700"
-                }`}
-              >
-                <Info className="w-4 h-4" />
-                Información
-              </button>
-              <button
-                onClick={() => setActiveTab("map")}
-                className={`px-5 py-3 font-medium text-sm flex items-center gap-2 ${
-                  activeTab === "map"
-                    ? "bg-gray-900 text-primary border-b-2 border-primary"
-                    : "text-white/70 hover:bg-gray-700"
-                }`}
-              >
-                <MapPin className="w-4 h-4" />
-                Mapa
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Content Container */}
-        <div className="flex-grow overflow-auto">
-          {activeTab === "map" && hasLocation ? (
-            <div className="p-5 md:p-6">
-              <div className="mb-4">
-                <h3 className="text-lg md:text-xl font-bold text-white flex items-center gap-2 mb-4">
-                  <MapPin className="w-5 h-5 text-primary" />
-                  Ubicación
-                </h3>
-                <div className="h-[300px] md:h-[calc(100vh-220px)] rounded-xl overflow-hidden border border-white/10 shadow-lg">
-                  <SchoolMap
-                    lat={currentSchool.LAT}
-                    lon={currentSchool.LON}
-                    schoolName={currentSchool.ESTABLECIMIENTO}
-                    cue={currentSchool.CUE}
-                    showDebugger={true}
-                  />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="p-5 md:p-6 space-y-6">
-              {/* Basic Information Section - Collapsible on mobile */}
-              <section>
-                <button
-                  onClick={() => toggleSection("basic")}
-                  className={`w-full flex justify-between items-center text-left ${isMobile ? "mb-2" : "mb-4"}`}
-                >
-                  <h3 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-                    <School className="w-5 h-5 text-primary" />
-                    Información Básica
-                  </h3>
-                  {isMobile &&
-                    (activeSection === "basic" ? (
-                      <ChevronUp className="w-5 h-5 text-white/70 transition-transform duration-300" />
-                    ) : (
-                      <ChevronDown className="w-5 h-5 text-white/70 transition-transform duration-300" />
-                    ))}
-                </button>
-
-                {/* Basic Information Section - Collapsible on mobile */}
-                <div
-                  className={`bg-gray-800/50 rounded-xl border border-white/5 overflow-hidden transition-all duration-300 ease-in-out ${
-                    !isMobile || activeSection === "basic"
-                      ? "p-4 md:p-5 opacity-100 max-h-[2000px]"
-                      : "max-h-0 p-0 opacity-0 border-0"
-                  }`}
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                    {basicInfo.map((item, index) => (
-                      <div
-                        key={index}
-                        className={`p-3 rounded-xl ${
-                          item.label === "PREDIO" && hasSharedPredio
-                            ? "col-span-1 md:col-span-2 bg-amber-900/30 border border-amber-500/30"
-                            : "bg-gray-700/50 border border-white/5 shadow-sm"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <div
-                            className={item.label === "PREDIO" && hasSharedPredio ? "text-amber-400" : "text-primary"}
-                          >
-                            {item.label === "PREDIO" && hasSharedPredio ? (
-                              <AlertTriangle className="w-4 h-4" />
-                            ) : (
-                              item.icon
-                            )}
-                          </div>
-                          <span
-                            className={`font-bold text-sm ${item.label === "PREDIO" && hasSharedPredio ? "text-amber-300" : "text-white"}`}
-                          >
-                            {item.label}
-                          </span>
-                        </div>
-                        <div className="pl-6 text-white/90">
-                          {/* Aplicar negrita a los valores de DISTRITO y FED A CARGO */}
-                          <span
-                            className={`${item.label === "DISTRITO" || item.label === "FED A CARGO" ? "font-bold" : ""}`}
-                          >
-                            {item.value || "Sin datos"}
-                          </span>
-                          {item.label === "PREDIO" && hasSharedPredio && (
-                            <span className="ml-2 text-xs bg-amber-500/30 text-amber-300 px-2 py-0.5 rounded-full inline-flex items-center">
-                              <AlertTriangle className="w-3 h-3 mr-1" />
-                              Compartido
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {hasLocation && activeTab !== "map" && (!isMobile || activeSection === "basic") && (
+                {/* Mapa */}
+                {hasValidCoordinates && (
                   <div className="mt-4">
                     <div className="flex justify-between items-center mb-2">
-                      <h4 className="font-bold text-white flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-primary" />
-                        Ubicación
-                      </h4>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setActiveTab("map")}
-                          className="text-xs bg-primary/20 px-3 py-1 rounded-full text-primary flex items-center hover:bg-primary/30"
-                        >
-                          <MapPin className="w-3 h-3 mr-1" />
-                          Ver mapa completo
-                        </button>
-                      </div>
+                      <h3 className="text-white font-medium">Ubicación</h3>
+                      <a
+                        href={googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary text-sm hover:underline flex items-center"
+                      >
+                        Ver en Google Maps
+                        <ExternalLink className="w-3 h-3 ml-1" />
+                      </a>
                     </div>
-                    <div className="h-36 md:h-48 rounded-xl overflow-hidden border border-white/10 shadow-lg">
-                      <SchoolMap
-                        lat={currentSchool.LAT}
-                        lon={currentSchool.LON}
-                        schoolName={currentSchool.ESTABLECIMIENTO}
-                        cue={currentSchool.CUE}
-                        showDebugger={true}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {hasSharedPredio && (
-                  <div className="mt-4">
-                    <button
-                      onClick={() => toggleSection("sharedPredio")}
-                      className={`w-full flex justify-between items-center text-left mb-2 ${!isMobile && "hidden"}`}
-                    >
-                      <h4 className="font-bold text-amber-300 flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-amber-400" />
-                        Predio Compartido
-                      </h4>
-                      {isMobile &&
-                        (activeSection === "sharedPredio" ? (
-                          <ChevronUp className="w-5 h-5 text-amber-400 transition-transform duration-300" />
-                        ) : (
-                          <ChevronDown className="w-5 h-5 text-amber-400 transition-transform duration-300" />
-                        ))}
-                    </button>
-
-                    {/* Shared Predio Information Section - Collapsible on mobile */}
-                    <div
-                      className={`bg-amber-900/30 rounded-xl border border-amber-500/30 shadow-lg overflow-hidden transition-all duration-300 ease-in-out ${
-                        !isMobile || activeSection === "sharedPredio"
-                          ? "p-4 opacity-100 max-h-[2000px]"
-                          : "max-h-0 p-0 opacity-0 border-0"
-                      }`}
-                    >
-                      {!isMobile && (
-                        <h4 className="font-bold text-amber-300 mb-3 flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4 text-amber-400" />
-                          Predio Compartido
-                        </h4>
-                      )}
-                      <p className="text-sm text-amber-200 mb-3">
-                        Este establecimiento comparte el predio {currentSchool.PREDIO} con:
+                    <div className="aspect-video bg-gray-800 rounded-lg flex items-center justify-center">
+                      <p className="text-white/50 text-sm">
+                        Coordenadas: {school.LAT}, {school.LON}
                       </p>
-                      <div className="bg-gray-800/70 rounded-xl p-3 max-h-36 md:max-h-48 overflow-y-auto border border-amber-500/20">
-                        <ul className="space-y-2">
-                          {currentSharedPredioInfo?.sharedWith.map((shared) => (
-                            <li key={shared.CUE} className="text-sm text-amber-100 flex items-start gap-2">
-                              <span className="text-amber-400 mr-1.5">•</span>
-                              <div>
-                                <span className="font-medium">{getAbbreviatedSchoolName(shared.ESTABLECIMIENTO)}</span>
-                                <br />
-                                <button
-                                  onClick={() => handleCUEClick(shared.CUE)}
-                                  className="text-xs text-amber-300 hover:text-amber-100 hover:underline flex items-center"
-                                >
-                                  CUE: {shared.CUE}
-                                  <ExternalLink className="w-3 h-3 ml-1" />
-                                </button>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
                     </div>
                   </div>
                 )}
-              </section>
+              </div>
+            )}
+          </div>
 
-              {/* Contact Information Section - Collapsible on mobile */}
-              <section>
-                <button
-                  onClick={() => toggleSection("contact")}
-                  className={`w-full flex justify-between items-center text-left ${isMobile ? "mb-2" : "mb-4"}`}
-                >
-                  <h3 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-                    <User className="w-5 h-5 text-primary" />
-                    Información de Contacto
-                  </h3>
-                  {isMobile &&
-                    (activeSection === "contact" ? (
-                      <ChevronUp className="w-5 h-5 text-white/70 transition-transform duration-300" />
-                    ) : (
-                      <ChevronDown className="w-5 h-5 text-white/70 transition-transform duration-300" />
-                    ))}
-                </button>
+          {/* Sección de contacto */}
+          <div className="mb-6">
+            <button
+              onClick={() => toggleSection("contact")}
+              className="flex items-center justify-between w-full text-white font-bold text-lg mb-2"
+            >
+              <span className="flex items-center">
+                <User className="w-5 h-5 mr-2" />
+                Información de Contacto
+              </span>
+              {activeSection === "contact" ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
 
-                {/* Contact Information Section - Collapsible on mobile */}
-                <div
-                  className={`bg-gray-800/50 rounded-xl border border-white/5 overflow-hidden transition-all duration-300 ease-in-out ${
-                    !isMobile || activeSection === "contact"
-                      ? "p-4 md:p-5 opacity-100 max-h-[2000px]"
-                      : "max-h-0 p-0 opacity-0 border-0"
-                  }`}
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                    {contactInfo.map((item, index) => (
-                      <div key={index} className="p-3 rounded-xl bg-gray-700/50 border border-white/5 shadow-sm">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="text-primary">{item.icon}</div>
-                          <span className="font-bold text-white text-sm">{item.label}</span>
-                        </div>
-                        <div className="pl-6 text-white/90">
-                          {item.label === "CORREO INSTITUCIONAL" && item.value !== "Sin datos" ? (
-                            <a
-                              href={`mailto:${item.value}`}
-                              className="text-primary hover:underline flex items-center gap-1 text-sm break-all"
-                            >
-                              {item.value}
-                              <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                            </a>
-                          ) : (
-                            <span className="text-sm">{item.value}</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </section>
+            {activeSection === "contact" && (
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                {renderFieldGroup(fieldGroups.contact)}
+              </div>
+            )}
+          </div>
 
-              {/* Technical Information Section - Collapsible on mobile */}
-              {filteredTechnicalInfo.length > 0 && (
-                <section>
-                  <button
-                    onClick={() => toggleSection("technical")}
-                    className={`w-full flex justify-between items-center text-left ${isMobile ? "mb-2" : "mb-4"}`}
-                  >
-                    <h3 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-                      <Wifi className="w-5 h-5 text-primary" />
-                      Información Técnica
-                    </h3>
-                    {isMobile &&
-                      (activeSection === "technical" ? (
-                        <ChevronUp className="w-5 h-5 text-white/70 transition-transform duration-300" />
-                      ) : (
-                        <ChevronDown className="w-5 h-5 text-white/70 transition-transform duration-300" />
-                      ))}
-                  </button>
-
-                  {/* Technical Information Section - Collapsible on mobile */}
-                  <div
-                    className={`bg-gray-800/50 rounded-xl border border-white/5 overflow-hidden transition-all duration-300 ease-in-out ${
-                      !isMobile || activeSection === "technical"
-                        ? "p-4 md:p-5 opacity-100 max-h-[2000px]"
-                        : "max-h-0 p-0 opacity-0 border-0"
-                    }`}
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                      {filteredTechnicalInfo.map((item, index) => (
-                        <div key={index} className="p-3 rounded-xl bg-gray-700/50 border border-white/5 shadow-sm">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="text-primary">{item.icon}</div>
-                            <span className="font-bold text-white text-sm">{item.label}</span>
-                          </div>
-                          <div className="pl-6 text-white/90 text-sm">{item.value}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </section>
+          {/* Sección de conectividad */}
+          <div className="mb-6">
+            <button
+              onClick={() => toggleSection("connectivity")}
+              className="flex items-center justify-between w-full text-white font-bold text-lg mb-2"
+            >
+              <span className="flex items-center">
+                <Wifi className="w-5 h-5 mr-2" />
+                Conectividad
+              </span>
+              {activeSection === "connectivity" ? (
+                <ChevronUp className="w-5 h-5" />
+              ) : (
+                <ChevronDown className="w-5 h-5" />
               )}
-            </div>
-          )}
+            </button>
+
+            {activeSection === "connectivity" && (
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                {renderFieldGroup(fieldGroups.connectivity)}
+              </div>
+            )}
+          </div>
+
+          {/* Sección técnica */}
+          <div className="mb-6">
+            <button
+              onClick={() => toggleSection("technical")}
+              className="flex items-center justify-between w-full text-white font-bold text-lg mb-2"
+            >
+              <span className="flex items-center">
+                <Info className="w-5 h-5 mr-2" />
+                Información Técnica
+              </span>
+              {activeSection === "technical" ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
+
+            {activeSection === "technical" && (
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                {renderFieldGroup(fieldGroups.technical)}
+              </div>
+            )}
+          </div>
+
+          {/* Otra información */}
+          <div className="mb-6">
+            <button
+              onClick={() => toggleSection("other")}
+              className="flex items-center justify-between w-full text-white font-bold text-lg mb-2"
+            >
+              <span className="flex items-center">
+                <Building className="w-5 h-5 mr-2" />
+                Otra Información
+              </span>
+              {activeSection === "other" ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
+
+            {activeSection === "other" && (
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                {renderFieldGroup(fieldGroups.other)}
+              </div>
+            )}
+          </div>
+
+          {/* Todos los campos */}
+          <div>
+            <button
+              onClick={() => toggleSection("all")}
+              className="flex items-center justify-between w-full text-white font-bold text-lg mb-2"
+            >
+              <span className="flex items-center">
+                <Info className="w-5 h-5 mr-2" />
+                Todos los Campos
+              </span>
+              {activeSection === "all" ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
+
+            {activeSection === "all" && (
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                {Object.keys(school)
+                  .filter((key) => !key.startsWith("_") && school[key])
+                  .sort()
+                  .map((key) => (
+                    <div key={key} className="mb-2">
+                      <div className="text-white/70 text-sm">{key}:</div>
+                      <div className="text-white ml-6">{school[key]}</div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Footer with close button */}
-        <div className="p-4 border-t border-white/10 bg-gray-800/80 backdrop-blur-sm sticky bottom-0 z-10">
+        {/* Footer */}
+        <div className="border-t border-white/10 p-4 bg-gray-900 sticky bottom-0">
           <button
             onClick={onClose}
-            className="w-full py-3 px-4 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary/90 hover:to-secondary/90 transition-all font-medium shadow-lg text-sm"
-            aria-label="Cerrar"
+            className="w-full py-2 px-4 bg-primary hover:bg-primary/90 text-white rounded-lg transition-colors"
           >
             Cerrar
           </button>
         </div>
       </div>
-    </div>,
-    document.body, // Render directly to the body element
+    </div>
   )
 }

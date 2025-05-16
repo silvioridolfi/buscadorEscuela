@@ -1,18 +1,15 @@
 import { getSupabaseData } from "./db-utils"
 
-/**
- * Normalize string for searching (remove accents, lowercase)
- */
-export function normalizeString(str: string | null | undefined): string {
-  if (str === null || str === undefined || typeof str !== "string") {
-    return ""
-  }
+// Función para normalizar strings (eliminar acentos, convertir a minúsculas)
+export function normalizeString(str: string): string {
+  if (!str) return ""
 
   return str
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // Remove accents
-    .trim() // Asegurarse de eliminar espacios al inicio y final
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w\s]/gi, "")
+    .trim()
 }
 
 /**
@@ -44,17 +41,34 @@ export function levenshteinDistance(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-/**
- * Calculate similarity score (0-100)
- */
+// Función para calcular la similitud entre dos strings (algoritmo simple)
 export function calculateSimilarity(str1: string, str2: string): number {
   if (!str1 || !str2) return 0
 
-  const maxLength = Math.max(str1.length, str2.length)
-  if (maxLength === 0) return 100 // Both strings are empty
+  const s1 = normalizeString(str1)
+  const s2 = normalizeString(str2)
 
-  const distance = levenshteinDistance(str1, str2)
-  return Math.round((1 - distance / maxLength) * 100)
+  // Si alguna cadena está vacía después de normalizar
+  if (!s1 || !s2) return 0
+
+  // Si son iguales
+  if (s1 === s2) return 100
+
+  // Si una contiene a la otra
+  if (s1.includes(s2)) return 90
+  if (s2.includes(s1)) return 90
+
+  // Calcular similitud basada en palabras comunes
+  const words1 = s1.split(/\s+/)
+  const words2 = s2.split(/\s+/)
+
+  const commonWords = words1.filter((word) => words2.includes(word))
+
+  if (commonWords.length === 0) return 0
+
+  const similarity = ((commonWords.length * 2) / (words1.length + words2.length)) * 100
+
+  return Math.round(similarity)
 }
 
 // Common words to ignore in search
