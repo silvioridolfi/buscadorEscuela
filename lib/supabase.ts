@@ -1,113 +1,82 @@
 import { createClient } from "@supabase/supabase-js"
 
-// Verificar y obtener las variables de entorno
-const getSupabaseUrl = () => {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!url) {
-    console.error("ADVERTENCIA: URL de Supabase no configurada")
-  }
-  return url || ""
-}
+// Crear un cliente de Supabase usando las variables de entorno
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-const getSupabaseAnonKey = () => {
-  const key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!key) {
-    console.error("ADVERTENCIA: Clave anónima de Supabase no configurada")
-  }
-  return key || ""
-}
+// Cliente para uso en el lado del cliente (solo operaciones públicas)
+export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
 
-const getSupabaseServiceKey = () => {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!key) {
-    console.error("ADVERTENCIA: Clave de servicio de Supabase no configurada")
-  }
-  return key || ""
-}
-
-// Crear clientes de Supabase
-export const supabaseClient = createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
-  auth: {
-    persistSession: false,
-  },
-})
-
-export const supabaseAdmin = createClient(getSupabaseUrl(), getSupabaseServiceKey(), {
-  auth: {
-    persistSession: false,
-  },
-})
+// Cliente para uso en el lado del servidor (operaciones privilegiadas)
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 // Función para generar UUIDs
 export function generateUUID() {
-  return crypto.randomUUID
-    ? crypto.randomUUID()
-    : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-        const r = (Math.random() * 16) | 0
-        const v = c === "x" ? r : (r & 0x3) | 0x8
-        return v.toString(16)
-      })
+  return crypto.randomUUID()
 }
 
-// Tipos para las tablas de Supabase
+// Tipos para las tablas de Supabase actualizados según la estructura real
 export interface Establecimiento {
-  id: string
-  cue: number
-  nombre?: string | null
-  distrito?: string | null
-  ciudad?: string | null
-  direccion?: string | null
-  lat?: number | null
-  lon?: number | null
-  predio?: string | null
-  fed_a_cargo?: string | null
-  plan_enlace?: string | null
-  subplan_enlace?: string | null
-  fecha_inicio_conectividad?: string | null
-  proveedor_internet_pnce?: string | null
-  fecha_instalacion_pnce?: string | null
-  pnce_tipo_mejora?: string | null
-  pnce_fecha_mejora?: string | null
-  pnce_estado?: string | null
-  pba_grupo_1_proveedor_internet?: string | null
-  pba_grupo_1_fecha_instalacion?: string | null
-  pba_grupo_1_estado?: string | null
-  pba_2019_proveedor_internet?: string | null
-  pba_2019_fecha_instalacion?: string | null
-  pba_2019_estado?: string | null
-  pba_grupo_2_a_proveedor_internet?: string | null
-  pba_grupo_2_a_fecha_instalacion?: string | null
-  pba_grupo_2_a_tipo_mejora?: string | null
-  pba_grupo_2_a_fecha_mejora?: string | null
-  pba_grupo_2_a_estado?: string | null
-  plan_piso_tecnologico?: string | null
-  proveedor_piso_tecnologico_cue?: string | null
-  fecha_terminado_piso_tecnologico_cue?: string | null
-  tipo_mejora?: string | null
-  fecha_mejora?: string | null
-  tipo_piso_instalado?: string | null
-  tipo?: string | null
-  observaciones?: string | null
-  tipo_establecimiento?: string | null
-  listado_conexion_internet?: string | null
-  estado_instalacion_pba?: string | null
-  proveedor_asignado_pba?: string | null
-  mb?: string | null
-  ambito?: string | null
-  cue_anterior?: string | null
-  reclamos_grupo_1_ani?: string | null
-  recurso_primario?: string | null
-  access_id?: string | null
+  id: string // uuid - REQUERIDO
+  cue: number // bigint
+  nombre?: string | null // text (equivalente a ESTABLECIMIENTO en la hoja de cálculo)
+  distrito?: string | null // text
+  ciudad?: string | null // text
+  direccion?: string | null // text
+  lat?: number | null // double precision
+  lon?: number | null // double precision
+  predio?: string | null // text
+  fed_a_cargo?: string | null // text
+  plan_enlace?: string | null // text
+  subplan_enlace?: string | null // text
+  fecha_inicio_conectividad?: string | null // text
+  proveedor_internet_pnce?: string | null // text
+  fecha_instalacion_pnce?: string | null // text
+  pnce_tipo_mejora?: string | null // text
+  pnce_fecha_mejora?: string | null // text
+  pnce_estado?: string | null // text
+  pba_grupo_1_proveedor_internet?: string | null // text
+  pba_grupo_1_fecha_instalacion?: string | null // text
+  pba_grupo_1_estado?: string | null // text
+  pba_2019_proveedor_internet?: string | null // text
+  pba_2019_fecha_instalacion?: string | null // text
+  pba_2019_estado?: string | null // text
+  pba_grupo_2_a_proveedor_internet?: string | null // text
+  pba_grupo_2_a_fecha_instalacion?: string | null // text
+  pba_grupo_2_a_tipo_mejora?: string | null // text
+  pba_grupo_2_a_fecha_mejora?: string | null // text
+  pba_grupo_2_a_estado?: string | null // text
+  plan_piso_tecnologico?: string | null // text
+  proveedor_piso_tecnologico_cue?: string | null // text
+  fecha_terminado_piso_tecnologico_cue?: string | null // text
+  tipo_mejora?: string | null // text
+  fecha_mejora?: string | null // text
+  tipo_piso_instalado?: string | null // text
+  tipo?: string | null // text
+  observaciones?: string | null // text
+  tipo_establecimiento?: string | null // text
+  listado_conexion_internet?: string | null // text
+  estado_instalacion_pba?: string | null // text
+  proveedor_asignado_pba?: string | null // text
+  mb?: string | null // text
+  ambito?: string | null // text
+  cue_anterior?: string | null // text
+  reclamos_grupo_1_ani?: string | null // text
+  recurso_primario?: string | null // text
+  access_id?: string | null // text
+  // Campos adicionales que podrían existir en la base de datos
   [key: string]: any
 }
 
 export interface Contacto {
-  id: string
-  cue?: number | null
-  nombre?: string | null
-  apellido?: string | null
-  correo?: string | null
-  telefono?: string | null
-  cargo?: string | null
+  id: string // uuid - REQUERIDO
+  cue?: number | null // bigint
+  nombre?: string | null // text
+  apellido?: string | null // text
+  correo?: string | null // text (equivalente a CORREO_INSTITUCIONAL en la hoja de cálculo)
+  telefono?: string | null // text
+  cargo?: string | null // text
+  // Campos adicionales que podrían existir en la base de datos
   [key: string]: any
 }

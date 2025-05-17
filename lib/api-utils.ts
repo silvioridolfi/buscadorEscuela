@@ -1,15 +1,261 @@
-import { getSupabaseData } from "./db-utils"
+// Simple in-memory cache
+let cachedEstablishmentsData: any[] | null = null
+let cachedContactsData: any[] | null = null
+let cacheTimestamp = 0
+const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes in milliseconds
 
-// Función para normalizar strings (eliminar acentos, convertir a minúsculas)
-export function normalizeString(str: string): string {
-  if (!str) return ""
+// API configuration
+const API_CONFIG = {
+  // Primary API (SheetDB)
+  primary: {
+    baseUrl: "https://sheetdb.io/api/v1/qrokpjlkogyzr",
+    contactsUrl: "https://sheetdb.io/api/v1/qrokpjlkogyzr?sheet=CONTACTOS",
+    active: true,
+    failCount: 0,
+    lastFailTime: 0,
+  },
+  // Secondary API (Sheet2API)
+  secondary: {
+    baseUrl: "https://sheet2api.com/v1/MUeoqbUXSf6Q/escuelas-conectividad-r1",
+    contactsUrl: "https://sheet2api.com/v1/MUeoqbUXSf6Q/escuelas-conectividad-r1/CONTACTOS",
+    active: false,
+    failCount: 0,
+    lastFailTime: 0,
+  },
+}
+
+// Maximum number of consecutive failures before switching APIs
+const MAX_FAIL_COUNT = 3
+// Cooldown period before trying a failed API again (30 minutes)
+const API_RETRY_COOLDOWN = 30 * 60 * 1000
+
+/**
+ * Fetch with retry and exponential backoff
+ */
+export async function fetchWithRetry(url: string, retries = 3, delay = 1000) {
+  let lastError
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(url)
+
+      // If we hit rate limit, wait and retry
+      if (response.status === 429) {
+        console.log(`Rate limit hit, waiting ${delay}ms before retry ${attempt + 1}/${retries}`)
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        // Increase delay for next attempt (exponential backoff)
+        delay *= 2
+        continue
+      }
+
+      return response
+    } catch (error) {
+      lastError = error
+      console.error(`Attempt ${attempt + 1}/${retries} failed:`, error)
+
+      if (attempt < retries - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        delay *= 2 // Exponential backoff
+      }
+    }
+  }
+
+  throw lastError || new Error(`Failed after ${retries} attempts`)
+}
+
+/**
+ * Get the currently active API configuration
+ */
+function getActiveApi() {
+  return API_CONFIG.primary.active ? API_CONFIG.primary : API_CONFIG.secondary
+}
+
+/**
+ * Switch to the other API
+ */
+function switchApi() {
+  const now = Date.now()
+
+  if (API_CONFIG.primary.active) {
+    // Switch from primary to secondary
+    console.log("Switching from primary to secondary API")
+    API_CONFIG.primary.active = false
+    API_CONFIG.primary.lastFailTime = now
+    API_CONFIG.secondary.active = true
+    API_CONFIG.secondary.failCount = 0
+  } else {
+    // Switch from secondary to primary
+    console.log("Switching from secondary to primary API")
+    API_CONFIG.secondary.active = false
+    API_CONFIG.secondary.lastFailTime = now
+    API_CONFIG.primary.active = true
+    API_CONFIG.primary.failCount = 0
+  }
+
+  // Clear cache when switching APIs
+  cachedEstablishmentsData = null
+  cachedContactsData = null
+  cacheTimestamp = 0
+}
+
+/**
+ * Record an API failure and switch if necessary
+ */
+function recordApiFailure(isPrimary: boolean) {
+  const api = isPrimary ? API_CONFIG.primary : API_CONFIG.secondary
+  api.failCount++
+
+  console.log(`API failure recorded for ${isPrimary ? "primary" : "secondary"} API. Fail count: ${api.failCount}`)
+
+  if (api.failCount >= MAX_FAIL_COUNT) {
+    switchApi()
+  }
+}
+
+/**
+ * Check if we should try a failed API again
+ */
+function shouldRetryFailedApi() {
+  const now = Date.now()
+  const inactiveApi = API_CONFIG.primary.active ? API_CONFIG.secondary : API_CONFIG.primary
+
+  // If the inactive API has been in cooldown for long enough, try it again
+  if (now - inactiveApi.lastFailTime > API_RETRY_COOLDOWN) {
+    console.log(`Cooldown period elapsed for ${API_CONFIG.primary.active ? "secondary" : "primary"} API. Trying again.`)
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Fetch data from the active API with fallback
+ */
+async function fetchApiData(isContactsData = false) {
+  // Check if we should retry the failed API
+  if (shouldRetryFailedApi()) {
+    switchApi()
+  }
+
+  const activeApi = getActiveApi()
+  const url = isContactsData ? activeApi.contactsUrl : activeApi.baseUrl
+  const isPrimary = activeApi === API_CONFIG.primary
+
+  try {
+    const response = await fetchWithRetry(url)
+
+    if (!response.ok) {
+      // If we get an error response, record the failure
+      recordApiFailure(isPrimary)
+      throw new Error(`Error fetching data: ${response.status}`)
+    }
+
+    // Reset fail count on success
+    activeApi.failCount = 0
+
+    return await response.json()
+  } catch (error) {
+    console.error(`Error fetching from ${isPrimary ? "primary" : "secondary"} API:`, error)
+    recordApiFailure(isPrimary)
+
+    // If we're already using the fallback API and it failed, throw the error
+    if (!isPrimary) {
+      throw error
+    }
+
+    // Try the other API immediately
+    switchApi()
+    return fetchApiData(isContactsData)
+  }
+}
+
+/**
+ * Get sheet data with caching and API fallback
+ */
+export async function getSheetData() {
+  const now = Date.now()
+
+  // Return cached data if it's still valid
+  if (cachedEstablishmentsData && cachedContactsData && now - cacheTimestamp < CACHE_DURATION) {
+    return {
+      establishmentsData: cachedEstablishmentsData,
+      contactsData: cachedContactsData,
+    }
+  }
+
+  // Fetch new data with fallback logic
+  try {
+    // Fetch establishments data
+    const establishmentsData = await fetchApiData(false)
+
+    // Wait a bit before making the second request to avoid rate limiting
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
+    // Fetch contacts data
+    const contactsData = await fetchApiData(true)
+
+    // Update cache
+    cachedEstablishmentsData = establishmentsData
+    cachedContactsData = contactsData
+    cacheTimestamp = now
+
+    return { establishmentsData, contactsData }
+  } catch (error) {
+    console.error("Error fetching sheet data:", error)
+
+    // If we have cached data, return it even if it's expired
+    if (cachedEstablishmentsData && cachedContactsData) {
+      console.log("Returning expired cached data due to fetch error")
+      return {
+        establishmentsData: cachedEstablishmentsData,
+        contactsData: cachedContactsData,
+      }
+    }
+
+    throw error
+  }
+}
+
+/**
+ * Get the current API status for debugging
+ */
+export function getApiStatus() {
+  return {
+    activeApi: API_CONFIG.primary.active ? "primary" : "secondary",
+    primary: {
+      active: API_CONFIG.primary.active,
+      failCount: API_CONFIG.primary.failCount,
+      lastFailTime: API_CONFIG.primary.lastFailTime,
+      cooldownRemaining: Math.max(0, API_RETRY_COOLDOWN - (Date.now() - API_CONFIG.primary.lastFailTime)),
+    },
+    secondary: {
+      active: API_CONFIG.secondary.active,
+      failCount: API_CONFIG.secondary.failCount,
+      lastFailTime: API_CONFIG.secondary.lastFailTime,
+      cooldownRemaining: Math.max(0, API_RETRY_COOLDOWN - (Date.now() - API_CONFIG.secondary.lastFailTime)),
+    },
+    cache: {
+      hasEstablishmentsData: !!cachedEstablishmentsData,
+      hasContactsData: !!cachedContactsData,
+      age: Date.now() - cacheTimestamp,
+      expiresIn: Math.max(0, CACHE_DURATION - (Date.now() - cacheTimestamp)),
+    },
+  }
+}
+
+/**
+ * Normalize string for searching (remove accents, lowercase)
+ */
+export function normalizeString(str: string | null | undefined): string {
+  if (str === null || str === undefined || typeof str !== "string") {
+    return ""
+  }
 
   return str
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\w\s]/gi, "")
-    .trim()
+    .replace(/[\u0300-\u036f]/g, "") // Remove accents
+    .trim() // Asegurarse de eliminar espacios al inicio y final
 }
 
 /**
@@ -41,34 +287,17 @@ export function levenshteinDistance(a: string, b: string): number {
   return matrix[b.length][a.length]
 }
 
-// Función para calcular la similitud entre dos strings (algoritmo simple)
+/**
+ * Calculate similarity score (0-100)
+ */
 export function calculateSimilarity(str1: string, str2: string): number {
   if (!str1 || !str2) return 0
 
-  const s1 = normalizeString(str1)
-  const s2 = normalizeString(str2)
+  const maxLength = Math.max(str1.length, str2.length)
+  if (maxLength === 0) return 100 // Both strings are empty
 
-  // Si alguna cadena está vacía después de normalizar
-  if (!s1 || !s2) return 0
-
-  // Si son iguales
-  if (s1 === s2) return 100
-
-  // Si una contiene a la otra
-  if (s1.includes(s2)) return 90
-  if (s2.includes(s1)) return 90
-
-  // Calcular similitud basada en palabras comunes
-  const words1 = s1.split(/\s+/)
-  const words2 = s2.split(/\s+/)
-
-  const commonWords = words1.filter((word) => words2.includes(word))
-
-  if (commonWords.length === 0) return 0
-
-  const similarity = ((commonWords.length * 2) / (words1.length + words2.length)) * 100
-
-  return Math.round(similarity)
+  const distance = levenshteinDistance(str1, str2)
+  return Math.round((1 - distance / maxLength) * 100)
 }
 
 // Common words to ignore in search
@@ -146,52 +375,4 @@ export function extractEducationLevel(name: string): string | null {
 export function extractSchoolNumber(name: string): string | null {
   const match = name.match(/\b(?:n|n°|nro|numero|número)?\s*(\d+)\b/i)
   return match ? match[1] : null
-}
-
-/**
- * Get sheet data - Wrapper function now using Supabase as primary source
- * Esta función mantiene la misma interfaz para compatibilidad con el código existente
- * pero internamente usa Supabase para obtener los datos
- */
-export async function getSheetData() {
-  try {
-    // Usar Supabase como fuente principal de datos
-    console.log("Obteniendo datos desde Supabase...")
-    const { establishmentsData, contactsData } = await getSupabaseData()
-
-    return { establishmentsData, contactsData }
-  } catch (error) {
-    console.error("Error al obtener datos desde Supabase:", error)
-
-    // Si quieres mantener la posibilidad de usar las APIs antiguas como último recurso,
-    // puedes cargar dinámicamente el módulo legacy-api-utils.ts aquí
-    console.error("ERROR CRÍTICO: Fallo al obtener datos. No hay sistema de fallback configurado.")
-    console.error("Para restaurar el sistema de fallback, importar getLegacySheetData desde legacy-api-utils.ts")
-
-    throw error
-  }
-}
-
-/**
- * Get the current API status for debugging
- */
-export function getApiStatus() {
-  try {
-    // Simplificado para reflejar solo Supabase
-    return {
-      activeApi: "supabase",
-      status: "active",
-      timestamp: new Date().toISOString(),
-      legacy: {
-        available: false,
-        message: "Legacy APIs (SheetDB/Sheet2API) no longer in use",
-      },
-    }
-  } catch (error) {
-    console.error("Error getting API status:", error)
-    return {
-      error: "Error al obtener estado de la API",
-      timestamp: new Date().toISOString(),
-    }
-  }
 }

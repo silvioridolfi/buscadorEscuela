@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { supabaseAdmin } from "@/lib/supabase"
 
 // Force dynamic rendering and disable caching
 export const dynamic = "force-dynamic"
@@ -15,45 +14,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    console.log(`API Predio: Buscando escuelas con PREDIO: "${predio}"`)
-
-    // Consultar escuelas que tengan el mismo predio
-    const { data: schools, error } = await supabaseAdmin
-      .from("establecimientos")
-      .select(`
-        *,
-        contactos (*)
-      `)
-      .eq("predio", predio.trim())
-
-    if (error) {
-      throw error
-    }
-
-    console.log(`API Predio: Encontradas ${schools?.length || 0} escuelas con PREDIO ${predio}`)
-
-    // Transformar los resultados al formato esperado por el frontend
-    const formattedSchools = schools.map((school) => {
-      const contact = school.contactos?.[0] || {}
-
-      return {
-        CUE: school.cue.toString(),
-        PREDIO: school.predio || "",
-        ESTABLECIMIENTO: school.nombre || "",
-        FED_A_CARGO: school.fed_a_cargo || "",
-        DISTRITO: school.distrito || "",
-        CIUDAD: school.ciudad || "",
-        DIRECCION: school.direccion || "",
-        // Incluir todos los demás campos necesarios...
-        LAT: school.lat ? String(school.lat) : "",
-        LON: school.lon ? String(school.lon) : "",
-        NOMBRE: contact.nombre || "",
-        APELLIDO: contact.apellido || "",
-        CARGO: contact.cargo || "",
-        TELEFONO: contact.telefono || "",
-        CORREO_INSTITUCIONAL: contact.correo || "",
-      }
-    })
+    // Nota: La columna "predio" no existe en la tabla de Supabase
+    // Por lo tanto, esta API no puede funcionar como se esperaba
+    // Devolvemos un array vacío para evitar errores en el frontend
 
     // Set cache control headers to prevent caching
     const headers = new Headers()
@@ -61,15 +24,16 @@ export async function GET(request: Request) {
     headers.set("Pragma", "no-cache")
     headers.set("Expires", "0")
 
-    // Return the formatted schools
+    // Return empty result with a debug field
     return NextResponse.json(
       {
-        schools: formattedSchools,
+        schools: [],
         debug: {
           requestedPredio: predio,
-          foundCount: formattedSchools.length,
-          foundCUEs: formattedSchools.map((school) => school.CUE),
+          foundCount: 0,
+          foundCUEs: [],
           timestamp: new Date().toISOString(),
+          message: "La columna 'predio' no existe en la tabla de Supabase",
         },
       },
       { headers },

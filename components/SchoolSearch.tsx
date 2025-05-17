@@ -3,10 +3,10 @@
 import type React from "react"
 import { useState, useCallback, useRef, useEffect } from "react"
 import SchoolCard from "./SchoolCard"
-import { Search, X, RefreshCw, School, AlertCircle, Loader2, Info } from "lucide-react"
+import { Search, X, RefreshCw, School, AlertCircle, Loader2 } from "lucide-react"
 
 // Add a version number to help track deployments
-const APP_VERSION = "2.0.5" // Diagnóstico y corrección de búsqueda
+const APP_VERSION = "2.0.3" // Optimización y corrección de funcionalidades
 // Generar versión automática basada en la fecha (formato: AAAA.MM.DD)
 const today = new Date()
 const AUTO_VERSION = `${today.getFullYear()}.${(today.getMonth() + 1).toString().padStart(2, "0")}.${today.getDate().toString().padStart(2, "0")}`
@@ -88,44 +88,8 @@ export default function SchoolSearch() {
   const [forceRefreshKey, setForceRefreshKey] = useState(Date.now())
   // Nuevo estado para rastrear si se ha realizado una búsqueda activa
   const [hasSearched, setHasSearched] = useState(false)
-  // Estado para rastrear si estamos usando la API de fallback
-  const [usingFallbackApi, setUsingFallbackApi] = useState(false)
-  // Estado para información de diagnóstico
-  const [diagnosticInfo, setDiagnosticInfo] = useState<any>(null)
-  const [showDiagnostic, setShowDiagnostic] = useState(false)
 
   const searchInputRef = useRef<HTMLInputElement>(null)
-
-  // Verificar la conexión a Supabase al cargar
-  useEffect(() => {
-    const checkSupabaseConnection = async () => {
-      try {
-        const response = await fetch("/api/debug/supabase-test", {
-          cache: "no-store",
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        })
-
-        const data = await response.json()
-        setDiagnosticInfo(data)
-
-        if (!data.success) {
-          console.error("Error en la conexión a Supabase:", data.error)
-          setError("Error en la conexión a la base de datos. Por favor, contacte al administrador.")
-        } else {
-          console.log("Conexión a Supabase exitosa. Registros disponibles:", data.count)
-        }
-      } catch (error) {
-        console.error("Error al verificar la conexión a Supabase:", error)
-        setDiagnosticInfo({ error: error.message })
-      }
-    }
-
-    checkSupabaseConnection()
-  }, [])
 
   // Force a refresh of the component on mount to clear any stale data
   useEffect(() => {
@@ -181,12 +145,13 @@ export default function SchoolSearch() {
   const checkSpecificPredios = useCallback(async () => {
     // Check for the specific PREDIO 606335 that should be shared between CUEs 60881800 and 60888400
     const specificPredio = "606335"
+    const specificCUEs = ["60881800", "60888400"]
 
     try {
-      console.log(`Client: Checking specific PREDIO ${specificPredio}`)
+      console.log(`Client: Checking specific PREDIO ${specificPredio} for CUEs ${specificCUEs.join(", ")}`)
 
       // Add timestamp to URL to bypass cache
-      const url = getTimestampedUrl(`/api/schools-by-predio/supabase?predio=${encodeURIComponent(specificPredio)}`)
+      const url = getTimestampedUrl(`/api/schools-by-predio?predio=${encodeURIComponent(specificPredio)}`)
       const response = await fetch(url, {
         cache: "no-store",
         headers: {
@@ -201,7 +166,7 @@ export default function SchoolSearch() {
       }
 
       const data = await response.json()
-      const schools = data.schools || []
+      const schools = data.schools || data // Handle both response formats
 
       console.log(`Client: Found ${schools.length} schools with specific PREDIO ${specificPredio}`)
 
@@ -264,7 +229,7 @@ export default function SchoolSearch() {
             console.log(`Client: Fetching schools for PREDIO: "${normalizedPredio}"`)
 
             try {
-              // Usar la API de Supabase para buscar escuelas por predio
+              // Cambiar la URL para usar la API de Supabase
               const url = getTimestampedUrl(
                 `/api/schools-by-predio/supabase?predio=${encodeURIComponent(normalizedPredio)}`,
               )
@@ -282,7 +247,7 @@ export default function SchoolSearch() {
               }
 
               const data = await response.json()
-              const schools = data.schools || []
+              const schools = data.schools || data // Handle both response formats
 
               console.log(
                 `Client: API returned ${Array.isArray(schools) ? schools.length : 0} schools for PREDIO ${normalizedPredio}`,
@@ -330,7 +295,7 @@ export default function SchoolSearch() {
         console.log("Client: Shared PREDIOs detected:", Object.keys(newSharedPredios).length)
         console.log("Client: Schools by PREDIO:", Object.keys(schoolsByPredio).length)
 
-        // Si no encontramos predios compartidos, verificar específicamente los que sabemos que deberían estar compartidos
+        // If we didn't find any shared PREDIOs, check the specific ones we know should be shared
         if (Object.keys(newSharedPredios).length === 0) {
           await checkSpecificPredios()
         }
@@ -462,40 +427,6 @@ export default function SchoolSearch() {
     }
   }, [results, fetchAllSchoolsForPredioCheck])
 
-  // Función para intentar con la API de fallback si la principal falla
-  const tryFallbackApi = useCallback(async (searchQuery: string) => {
-    console.log("Intentando con API de fallback...")
-    setUsingFallbackApi(true)
-
-    try {
-      // Usar la API original como fallback
-      const params = new URLSearchParams()
-      if (searchQuery) params.append("query", searchQuery)
-
-      const url = getTimestampedUrl(`/api/search?${params.toString()}`)
-      const response = await fetch(url, {
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Ocurrió un error al buscar los datos (fallback)")
-      }
-
-      const data = await response.json()
-      console.log(`API fallback: Recuperadas ${data?.length || 0} escuelas.`)
-      return data
-    } catch (error) {
-      console.error("Error en API fallback:", error)
-      throw error
-    }
-  }, [])
-
   const fetchResults = useCallback(
     async (searchQuery?: string) => {
       const queryToUse = searchQuery !== undefined ? searchQuery : query
@@ -507,19 +438,14 @@ export default function SchoolSearch() {
 
       setLoading(true)
       setError(null)
-      setUsingFallbackApi(false)
 
       try {
         // Build query params
         const params = new URLSearchParams()
         if (queryToUse) params.append("query", queryToUse)
 
-        // Intentar primero con la API de Supabase
-        console.log(`Cliente: Buscando "${queryToUse}" usando API de Supabase...`)
+        // Cambiar la URL para usar la API de Supabase
         const url = getTimestampedUrl(`/api/search/supabase?${params.toString()}`)
-
-        console.log("URL de búsqueda:", url)
-
         const response = await fetch(url, {
           cache: "no-store",
           headers: {
@@ -529,86 +455,23 @@ export default function SchoolSearch() {
           },
         })
 
-        // Guardar la respuesta para diagnóstico
-        const responseText = await response.text()
-        let data
-
-        try {
-          data = JSON.parse(responseText)
-        } catch (e) {
-          console.error("Error al parsear la respuesta JSON:", e)
-          console.log("Respuesta recibida:", responseText)
-          setDiagnosticInfo({
-            ...diagnosticInfo,
-            lastResponse: responseText,
-            parseError: e.message,
-          })
-          throw new Error("Error al parsear la respuesta del servidor")
-        }
-
-        // Actualizar información de diagnóstico
-        setDiagnosticInfo({
-          ...diagnosticInfo,
-          lastQuery: queryToUse,
-          lastResponse: data,
-          responseStatus: response.status,
-          responseOk: response.ok,
-        })
-
         if (!response.ok) {
-          console.error("Error en API de Supabase:", data)
-
-          // Si la API de Supabase falla, intentar con la API de fallback
-          console.log("Intentando con API de fallback...")
-          const fallbackResults = await tryFallbackApi(queryToUse)
-          setResults(fallbackResults)
-        } else {
-          console.log(`API Supabase: Recuperadas ${data?.length || 0} escuelas.`)
-
-          // Si no hay resultados con Supabase, intentar con la API de fallback
-          if (!data || data.length === 0) {
-            console.log("No hay resultados con Supabase, intentando con API de fallback...")
-            try {
-              const fallbackResults = await tryFallbackApi(queryToUse)
-              if (fallbackResults && fallbackResults.length > 0) {
-                setResults(fallbackResults)
-              } else {
-                setResults([])
-              }
-            } catch (fallbackError) {
-              console.error("Error en API fallback:", fallbackError)
-              setResults([])
-            }
-          } else {
-            setResults(data)
-          }
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Ocurrió un error al buscar los datos")
         }
 
+        const data = await response.json()
+        setResults(data)
         // Marcar que se ha realizado una búsqueda
         setHasSearched(true)
       } catch (error) {
         console.error("Error en fetchResults:", error)
-        setDiagnosticInfo({
-          ...diagnosticInfo,
-          lastError: error.message,
-          errorStack: error.stack,
-        })
-
-        // Intentar con la API de fallback si hay un error
-        try {
-          console.log("Error en API principal, intentando con API de fallback...")
-          const fallbackResults = await tryFallbackApi(queryToUse)
-          setResults(fallbackResults)
-        } catch (fallbackError) {
-          console.error("Error en API fallback:", fallbackError)
-          setError("Ocurrió un error inesperado en ambas APIs. Por favor, intente más tarde.")
-          setResults([])
-        }
+        setError(error.message || "Ocurrió un error inesperado")
       } finally {
         setLoading(false)
       }
     },
-    [query, tryFallbackApi, diagnosticInfo],
+    [query],
   )
 
   // Function to search by CUE
@@ -635,7 +498,6 @@ export default function SchoolSearch() {
     setSharedPredios({})
     // Reiniciar el estado de búsqueda
     setHasSearched(false)
-    setUsingFallbackApi(false)
 
     // Usar un pequeño retraso para asegurar que el DOM se actualice antes de enfocar
     setTimeout(() => {
@@ -651,80 +513,69 @@ export default function SchoolSearch() {
     handleClear()
   }
 
-  // Función para mostrar/ocultar información de diagnóstico
-  const toggleDiagnostic = () => {
-    setShowDiagnostic(!showDiagnostic)
-  }
-
   return (
     <div className="max-w-6xl mx-auto px-4" key={forceRefreshKey}>
-      {/* Search Panel - Improved mobile design */}
+      {/* Search Panel - Nuevo diseño con efecto de vidrio */}
       <div className="mb-8">
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 md:p-6 shadow-xl border border-white/20">
-          <form onSubmit={handleSubmit} className="mb-4 md:mb-6">
-            {/* Input field - Mobile optimized */}
-            <div className="relative w-full mb-3">
-              <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-primary">
-                <Search className="w-5 h-5" />
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 shadow-xl border border-white/20">
+          <form onSubmit={handleSubmit} className="mb-6">
+            <div className="flex flex-col md:flex-row gap-4">
+              {/* Input field - Diseño mejorado */}
+              <div className="relative flex-grow">
+                <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-primary">
+                  <Search className="w-5 h-5" />
+                </div>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={handleInputChange}
+                  placeholder="Ingresar CUE o nombre de establecimiento"
+                  className="w-full px-6 py-3 pl-12 rounded-xl border-2 border-white/30 focus:border-primary text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-lg bg-white/5 backdrop-blur-sm"
+                  ref={searchInputRef}
+                  autoFocus
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={handleClearButtonClick}
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-1 rounded-full transition-colors"
+                    aria-label="Limpiar búsqueda"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-              <input
-                type="text"
-                value={query}
-                onChange={handleInputChange}
-                placeholder="Ingresar CUE o nombre de establecimiento"
-                className="w-full px-6 py-3 pl-12 rounded-xl border-2 border-white/30 focus:border-primary text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-lg bg-white/5 backdrop-blur-sm text-base"
-                ref={searchInputRef}
-                autoFocus
-              />
-              {query && (
+
+              {/* Buttons - Diseño mejorado */}
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="px-6 py-3 rounded-xl bg-primary hover:bg-primary/90 text-white font-medium transition-colors disabled:opacity-50 shadow-lg flex items-center justify-center min-w-[120px]"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <Search className="w-4 h-4 mr-2" />
+                      Buscar
+                    </>
+                  )}
+                </button>
                 <button
                   type="button"
-                  onClick={handleClearButtonClick}
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-1 rounded-full transition-colors"
-                  aria-label="Limpiar búsqueda"
+                  onClick={forceHardRefresh}
+                  title="Actualizar"
+                  className="px-3 py-3 rounded-xl bg-accent hover:bg-accent/90 text-white font-medium transition-colors shadow-lg flex items-center justify-center"
                 >
-                  <X className="w-4 h-4" />
+                  <RefreshCw className="w-5 h-5" />
                 </button>
-              )}
-            </div>
-
-            {/* Buttons - Full width on mobile, side by side on desktop */}
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                className="flex-grow px-6 py-3 rounded-xl bg-primary hover:bg-primary/90 text-white font-medium transition-colors disabled:opacity-50 shadow-lg flex items-center justify-center"
-                disabled={loading}
-              >
-                {loading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <Search className="w-4 h-4 mr-2" />
-                    Buscar
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={forceHardRefresh}
-                title="Actualizar"
-                className="px-4 py-3 rounded-xl bg-accent hover:bg-accent/90 text-white font-medium transition-colors shadow-lg flex items-center justify-center"
-              >
-                <RefreshCw className="w-5 h-5" />
-              </button>
-              <button
-                type="button"
-                onClick={toggleDiagnostic}
-                title="Diagnóstico"
-                className="px-4 py-3 rounded-xl bg-gray-500 hover:bg-gray-600 text-white font-medium transition-colors shadow-lg flex items-center justify-center"
-              >
-                <Info className="w-5 h-5" />
-              </button>
+              </div>
             </div>
           </form>
 
           {error && (
-            <div className="bg-red-500/20 backdrop-blur-sm border-l-4 border-red-500 text-white p-4 rounded-lg">
+            <div className="bg-red-500/20 backdrop-blur-sm border-l-4 border-red-500 text-white p-4 rounded-lg mb-4">
               <div className="flex">
                 <div className="flex-shrink-0">
                   <AlertCircle className="h-5 w-5 text-red-300" />
@@ -735,38 +586,15 @@ export default function SchoolSearch() {
               </div>
             </div>
           )}
-
-          {usingFallbackApi && (
-            <div className="bg-yellow-500/20 backdrop-blur-sm border-l-4 border-yellow-500 text-white p-4 rounded-lg mt-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <AlertCircle className="h-5 w-5 text-yellow-300" />
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm">
-                    Usando sistema de búsqueda alternativo. Algunos resultados podrían no ser precisos.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Información de diagnóstico */}
-          {showDiagnostic && diagnosticInfo && (
-            <div className="mt-4 bg-gray-800/80 backdrop-blur-sm border border-gray-700 rounded-lg p-4 text-white text-xs overflow-auto max-h-60">
-              <h3 className="font-bold mb-2">Información de diagnóstico:</h3>
-              <pre className="whitespace-pre-wrap">{JSON.stringify(diagnosticInfo, null, 2)}</pre>
-            </div>
-          )}
         </div>
 
         {results.length > 0 && (
           <div className="mt-8 mb-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl md:text-2xl font-bold text-white flex items-center">
-                <School className="w-5 h-5 md:w-6 md:h-6 mr-2 md:mr-3" />
+              <h2 className="text-2xl font-bold text-white flex items-center">
+                <School className="w-6 h-6 mr-3" />
                 Resultados
-                <span className="ml-2 md:ml-3 px-3 py-0.5 md:px-4 md:py-1 bg-primary/20 text-white rounded-full text-xs md:text-sm font-normal">
+                <span className="ml-3 px-4 py-1 bg-primary/20 text-white rounded-full text-sm font-normal">
                   {results.length} encontrados
                 </span>
               </h2>
