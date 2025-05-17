@@ -3,6 +3,7 @@
 import type React from "react"
 import { useState, useCallback, useRef, useEffect } from "react"
 import SchoolCard from "./SchoolCard"
+import DetailedInfoModal from "./DetailedInfoModal"
 import { Search, X, RefreshCw, School, AlertCircle, Loader2 } from "lucide-react"
 
 // Add a version number to help track deployments
@@ -88,6 +89,9 @@ export default function SchoolSearch() {
   const [forceRefreshKey, setForceRefreshKey] = useState(Date.now())
   // Nuevo estado para rastrear si se ha realizado una búsqueda activa
   const [hasSearched, setHasSearched] = useState(false)
+  // Estado para el modal de información detallada
+  const [selectedSchool, setSelectedSchool] = useState<SchoolInfo | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -433,6 +437,7 @@ export default function SchoolSearch() {
 
       if (queryToUse.length === 0) {
         setResults([])
+        setHasSearched(false) // No se considera una búsqueda si el query está vacío
         return
       }
 
@@ -511,6 +516,18 @@ export default function SchoolSearch() {
   // Función para manejar el clic en el botón X
   const handleClearButtonClick = () => {
     handleClear()
+  }
+
+  // Función para abrir el modal de información detallada
+  const handleViewDetails = (school: SchoolInfo) => {
+    setSelectedSchool(school)
+    setIsModalOpen(true)
+  }
+
+  // Función para cerrar el modal
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setSelectedSchool(null)
   }
 
   return (
@@ -609,9 +626,24 @@ export default function SchoolSearch() {
         {results.map((school) => (
           <SchoolCard
             key={school.CUE}
-            school={school}
+            school={{
+              cue: Number.parseInt(school.CUE),
+              establecimiento: school.ESTABLECIMIENTO,
+              predio: school.PREDIO,
+              distrito: school.DISTRITO,
+              ciudad: school.CIUDAD,
+              direccion: school.DIRECCION,
+              fed_a_cargo: school.FED_A_CARGO,
+              nombre: school.NOMBRE,
+              apellido: school.APELLIDO,
+              cargo: school.CARGO,
+              telefono: school.TELEFONO,
+              correo_institucional: school.CORREO_INSTITUCIONAL,
+              lat: Number.parseFloat(school.LAT),
+              lon: Number.parseFloat(school.LON),
+            }}
             sharedPredioInfo={sharedPredios[school.CUE]}
-            onSearchByCUE={handleSearchByCUE}
+            onViewDetails={() => handleViewDetails(school)}
           />
         ))}
       </div>
@@ -641,6 +673,17 @@ export default function SchoolSearch() {
             Realizar nueva búsqueda
           </button>
         </div>
+      )}
+
+      {/* Modal de información detallada */}
+      {selectedSchool && (
+        <DetailedInfoModal
+          school={selectedSchool}
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+          sharedPredioInfo={sharedPredios[selectedSchool.CUE]}
+          onSearchByCUE={handleSearchByCUE}
+        />
       )}
     </div>
   )

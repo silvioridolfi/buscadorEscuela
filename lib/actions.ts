@@ -14,22 +14,9 @@ export async function searchEstablecimientos(query: string): Promise<Establecimi
 
   // Verificar si la consulta es un número
   const isNumeric = !isNaN(Number.parseInt(normalizedQuery)) && normalizedQuery.match(/^\d+$/)
+  const numericValue = isNumeric ? Number.parseInt(normalizedQuery) : 0
 
-  let queryBuilder = supabase
-    .from("establecimientos")
-    .select(`
-      *,
-      contactos (*)
-    `)
-    .limit(50)
-
-  // Aplicar filtros según el tipo de consulta
-  if (isNumeric) {
-    // Si es un número, buscar por CUE exacto
-    const numericValue = Number.parseInt(normalizedQuery)
-    queryBuilder = queryBuilder.eq("cue", numericValue)
-  } else {
-    // Si es texto, buscar en campos de texto
+  try {
     // Primero, obtengamos la estructura de la tabla para verificar los nombres de columnas
     const { data: tableInfo, error: tableError } = await supabase.from("establecimientos").select("*").limit(1)
 
@@ -44,57 +31,94 @@ export async function searchEstablecimientos(query: string): Promise<Establecimi
 
     console.log("Columnas disponibles:", columns)
 
-    // Construir la consulta OR basada en las columnas de texto que existen
-    const orConditions = []
+    let query
 
-    // Buscar en columnas que podrían contener el nombre del establecimiento
-    const possibleTextColumns = [
-      "nombre",
-      "nombre_establecimiento",
-      "nombre_completo",
-      "denominacion",
-      "distrito",
-      "predio",
-      "localidad",
-      "direccion",
-    ]
+    if (isNumeric) {
+      // Si es un número, buscar por CUE exacto
+      query = supabase
+        .from("establecimientos")
+        .select(`
+          *,
+          contactos (*)
+        `)
+        .eq("cue", numericValue)
+        .limit(50)
+    } else {
+      // Si es texto, buscar en campos de texto
+      // Construir la consulta OR basada en las columnas de texto que existen
+      const textColumns = [
+        "nombre",
+        "nombre_establecimiento",
+        "nombre_completo",
+        "denominacion",
+        "distrito",
+        "predio",
+        "localidad",
+        "direccion",
+      ].filter((col) => columns.includes(col))
 
-    for (const col of possibleTextColumns) {
-      if (columns.includes(col)) {
-        orConditions.push(`${col}.ilike.%${normalizedQuery}%`)
+      if (textColumns.length === 0) {
+        console.error("No se encontraron columnas de texto adecuadas para la búsqueda")
+        throw new Error("No se encontraron columnas adecuadas para la búsqueda")
       }
+
+      // Construir filtros para cada columna de texto
+      const filters = textColumns.map((col) =>
+        supabase
+          .from("establecimientos")
+          .select(`
+            *,
+            contactos (*)
+          `)
+          .ilike(col, `%${normalizedQuery}%`)
+          .limit(50),
+      )
+
+      // Ejecutar todas las consultas en paralelo
+      const results = await Promise.all(filters.map((query) => query))
+
+      // Combinar y deduplicar resultados
+      const allEstablecimientos = results.flatMap((result) => result.data || []).filter(Boolean)
+
+      // Deduplicar por CUE
+      const uniqueEstablecimientos = Array.from(new Map(allEstablecimientos.map((item) => [item.cue, item])).values())
+
+      // Transformar los datos
+      const transformedResults: EstablecimientoConContacto[] = uniqueEstablecimientos.map((est) => {
+        const contacto = est.contactos?.[0] || {}
+        return {
+          ...est,
+          ...contacto,
+          contactos: undefined, // Eliminar el array anidado
+        }
+      })
+
+      return transformedResults
     }
 
-    // Si no encontramos columnas para buscar, lanzar un error
-    if (orConditions.length === 0) {
-      console.error("No se encontraron columnas adecuadas para la búsqueda")
-      throw new Error("No se encontraron columnas adecuadas para la búsqueda")
+    // Ejecutar la consulta para búsqueda numérica
+    const { data: establecimientos, error } = await query
+
+    if (error) {
+      console.error("Error al buscar establecimientos:", error)
+      throw new Error("Error al buscar establecimientos")
     }
 
-    // Aplicar la condición OR
-    queryBuilder = queryBuilder.or(orConditions.join(","))
+    // Transformar los datos para que coincidan con el tipo EstablecimientoConContacto
+    const results: EstablecimientoConContacto[] = establecimientos.map((est) => {
+      const contacto = est.contactos?.[0] || {}
+      return {
+        ...est,
+        ...contacto,
+        contactos: undefined, // Eliminar el array anidado
+      }
+    })
+
+    return results
+  } catch (error) {
+    console.error("Error en searchEstablecimientos:", error)
+    throw error
   }
-
-  // Ejecutar la consulta
-  const { data: establecimientos, error } = await queryBuilder
-
-  if (error) {
-    console.error("Error al buscar establecimientos:", error)
-    throw new Error("Error al buscar establecimientos")
-  }
-
-  // Transformar los datos para que coincidan con el tipo EstablecimientoConContacto
-  const results: EstablecimientoConContacto[] = establecimientos.map((est) => {
-    const contacto = est.contactos?.[0] || {}
-
-    return {
-      ...est,
-      ...contacto,
-      contactos: undefined, // Eliminar el array anidado
-    }
-  })
-
-  return results
 }
 
 /**
