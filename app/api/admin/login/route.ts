@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { generateAdminToken } from "@/lib/auth-utils"
 
 export async function POST(request: Request) {
   try {
@@ -10,8 +9,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Contraseña incorrecta" }, { status: 401 })
     }
 
-    // Generar un token para la sesión
-    const token = generateAdminToken()
+    // Usar directamente el ADMIN_AUTH_KEY como token
+    const token = process.env.ADMIN_AUTH_KEY
+
+    if (!token) {
+      return NextResponse.json({ error: "Error de configuración: ADMIN_AUTH_KEY no está definido" }, { status: 500 })
+    }
 
     return NextResponse.json({ token })
   } catch (error) {

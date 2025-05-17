@@ -9,6 +9,7 @@ import Image from "next/image"
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   // Verificar si hay un token guardado al cargar la página
   useEffect(() => {
@@ -38,6 +39,16 @@ export default function AdminPage() {
         // Token inválido, eliminar del almacenamiento local
         localStorage.removeItem("adminToken")
         setIsAuthenticated(false)
+
+        // Intentar obtener el mensaje de error
+        try {
+          const errorData = await response.json()
+          if (errorData && errorData.error) {
+            setAuthError(errorData.error)
+          }
+        } catch (e) {
+          console.error("Error al parsear la respuesta de error:", e)
+        }
       }
     } catch (error) {
       console.error("Error al verificar el token:", error)
@@ -60,6 +71,12 @@ export default function AdminPage() {
 
       if (response.ok) {
         const data = await response.json()
+
+        if (!data.token) {
+          console.error("No se recibió un token del servidor")
+          return false
+        }
+
         // Guardar el token en el almacenamiento local
         localStorage.setItem("adminToken", data.token)
         setIsAuthenticated(true)
@@ -113,6 +130,14 @@ export default function AdminPage() {
       </div>
 
       {isAuthenticated ? <AdminPanel onLogout={handleLogout} /> : <AdminLogin onLogin={handleLogin} />}
+
+      {authError && !isAuthenticated && (
+        <div className="mt-4 p-3 bg-red-900/50 border border-red-500/30 rounded-xl text-sm text-red-200 max-w-md">
+          <div className="flex items-start">
+            <span>Error de autenticación: {authError}</span>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 text-center text-white/50 text-xs">
         © {new Date().getFullYear()} Dirección de Tecnología Educativa
