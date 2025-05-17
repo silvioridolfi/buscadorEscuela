@@ -12,20 +12,71 @@ export async function searchEstablecimientos(query: string): Promise<Establecimi
   // Normalizar la consulta
   const normalizedQuery = query.trim().toLowerCase()
 
-  // Buscar en establecimientos
-  const { data: establecimientos, error } = await supabase
+  // Verificar si la consulta es un número
+  const isNumeric = !isNaN(Number.parseInt(normalizedQuery)) && normalizedQuery.match(/^\d+$/)
+
+  let queryBuilder = supabase
     .from("establecimientos")
     .select(`
       *,
       contactos (*)
     `)
-    .or(`
-      cue.eq.${isNaN(Number.parseInt(normalizedQuery)) ? 0 : Number.parseInt(normalizedQuery)},
-      establecimiento.ilike.%${normalizedQuery}%,
-      distrito.ilike.%${normalizedQuery}%,
-      predio.ilike.%${normalizedQuery}%
-    `)
     .limit(50)
+
+  // Aplicar filtros según el tipo de consulta
+  if (isNumeric) {
+    // Si es un número, buscar por CUE exacto
+    const numericValue = Number.parseInt(normalizedQuery)
+    queryBuilder = queryBuilder.eq("cue", numericValue)
+  } else {
+    // Si es texto, buscar en campos de texto
+    // Primero, obtengamos la estructura de la tabla para verificar los nombres de columnas
+    const { data: tableInfo, error: tableError } = await supabase.from("establecimientos").select("*").limit(1)
+
+    if (tableError) {
+      console.error("Error al obtener información de la tabla:", tableError)
+      throw new Error("Error al obtener información de la tabla")
+    }
+
+    // Verificar qué columnas existen realmente
+    const sampleRow = tableInfo && tableInfo.length > 0 ? tableInfo[0] : {}
+    const columns = Object.keys(sampleRow)
+
+    console.log("Columnas disponibles:", columns)
+
+    // Construir la consulta OR basada en las columnas de texto que existen
+    const orConditions = []
+
+    // Buscar en columnas que podrían contener el nombre del establecimiento
+    const possibleTextColumns = [
+      "nombre",
+      "nombre_establecimiento",
+      "nombre_completo",
+      "denominacion",
+      "distrito",
+      "predio",
+      "localidad",
+      "direccion",
+    ]
+
+    for (const col of possibleTextColumns) {
+      if (columns.includes(col)) {
+        orConditions.push(`${col}.ilike.%${normalizedQuery}%`)
+      }
+    }
+
+    // Si no encontramos columnas para buscar, lanzar un error
+    if (orConditions.length === 0) {
+      console.error("No se encontraron columnas adecuadas para la búsqueda")
+      throw new Error("No se encontraron columnas adecuadas para la búsqueda")
+    }
+
+    // Aplicar la condición OR
+    queryBuilder = queryBuilder.or(orConditions.join(","))
+  }
+
+  // Ejecutar la consulta
+  const { data: establecimientos, error } = await queryBuilder
 
   if (error) {
     console.error("Error al buscar establecimientos:", error)

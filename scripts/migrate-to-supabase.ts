@@ -7,6 +7,37 @@ import { supabaseAdmin, type Establecimiento, type Contacto, generateUUID } from
  * Este script se puede ejecutar manualmente o programar para que se ejecute periódicamente
  * para mantener la base de datos sincronizada con las hojas de cálculo.
  */
+
+// Función para insertar datos en lotes con upsert
+async function insertDataInBatches(tableName, data, batchSize = 100) {
+  console.log(`Insertando o actualizando ${data.length} filas en la tabla ${tableName}...`)
+
+  for (let i = 0; i < data.length; i += batchSize) {
+    const batch = data.slice(i, i + batchSize)
+
+    // Limpiar campos vacíos de cada fila
+    const cleanBatch = batch.map((row) => {
+      const cleanRow = {}
+      Object.entries(row).forEach(([key, value]) => {
+        if (value !== null && value !== "" && value !== undefined) {
+          cleanRow[key] = value
+        }
+      })
+      return cleanRow
+    })
+
+    const { error } = await supabaseAdmin.from(tableName).upsert(cleanBatch, { onConflict: ["cue"] })
+
+    if (error) {
+      console.error(`Error al hacer upsert en ${tableName} (lote ${i}–${i + batchSize}):`, error)
+    } else {
+      console.log(`Lote ${i}–${i + batchSize} procesado correctamente.`)
+    }
+  }
+
+  console.log(`Migración finalizada para ${tableName}.`)
+}
+
 async function migrateDataToSupabase() {
   console.log("Iniciando migración de datos a Supabase...")
 
@@ -75,51 +106,15 @@ async function migrateDataToSupabase() {
       }
     })
 
-    // 3. Insertar datos en Supabase
+    // 3. Insertar datos en Supabase usando la nueva función insertDataInBatches
     console.log("Insertando datos en Supabase...")
 
     // Insertar establecimientos
-    console.log("Insertando establecimientos...")
-    for (let i = 0; i < establecimientos.length; i += 25) {
-      const batch = establecimientos.slice(i, i + 25)
-      try {
-        const { error } = await supabaseAdmin.from("establecimientos").upsert(batch, {
-          onConflict: "cue",
-          ignoreDuplicates: false,
-        })
+    await insertDataInBatches("establecimientos", establecimientos, 100)
 
-        if (error) {
-          console.error(`Error al insertar lote de establecimientos ${i}-${i + batch.length}:`, error)
-        } else {
-          console.log(`Insertados establecimientos ${i}-${i + batch.length}`)
-        }
-      } catch (error) {
-        console.error(`Error al insertar lote de establecimientos ${i}-${i + batch.length}:`, error)
-      }
-    }
-
-    // Insertar contactos - Modificado para no usar onConflict con cue
-    console.log("Insertando contactos...")
-    for (let i = 0; i < contactos.length; i += 25) {
-      const batch = contactos.slice(i, i + 25)
-      try {
-        // Primero, intentamos eliminar contactos existentes con los mismos CUEs para evitar duplicados
-        const cues = batch.map((contact) => contact.cue).filter(Boolean)
-        if (cues.length > 0) {
-          await supabaseAdmin.from("contactos").delete().in("cue", cues)
-        }
-
-        // Luego insertamos los nuevos contactos
-        const { error } = await supabaseAdmin.from("contactos").insert(batch)
-
-        if (error) {
-          console.error(`Error al insertar lote de contactos ${i}-${i + batch.length}:`, error)
-        } else {
-          console.log(`Insertados contactos ${i}-${i + batch.length}`)
-        }
-      } catch (error) {
-        console.error(`Error al insertar lote de contactos ${i}-${i + batch.length}:`, error)
-      }
+    // Insertar contactos
+    if (contactos && contactos.length > 0) {
+      await insertDataInBatches("contactos", contactos, 100)
     }
 
     console.log("Migración completada con éxito")
