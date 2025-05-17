@@ -1,20 +1,19 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { verifyAdminAuth } from "@/lib/auth-utils"
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const { token } = await request.json()
 
-    // Verificar el token
-    const isValid = verifyAdminAuth(token)
-
-    if (!isValid) {
+    if (verifyAdminAuth(token)) {
+      // Si el token es válido, devolver éxito
+      return NextResponse.json({ success: true })
+    } else {
+      // Si el token no es válido, devolver error
       return NextResponse.json({ error: "Token inválido" }, { status: 401 })
     }
-
-    return NextResponse.json({ valid: true })
   } catch (error) {
-    console.error("Error en la API de verificación:", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+    console.error("Error al verificar el token:", error)
+    return NextResponse.json({ error: "Error al procesar la solicitud" }, { status: 500 })
   }
 }

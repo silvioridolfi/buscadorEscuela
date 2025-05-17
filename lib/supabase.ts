@@ -1,82 +1,81 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient as createClientBase } from "@supabase/supabase-js"
+import { v4 as uuidv4 } from "uuid"
 
-// Crear un cliente de Supabase usando las variables de entorno
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+// Tipos para las tablas de Supabase
+export type Establecimiento = {
+  cue: number
+  predio: string | null
+  establecimiento: string | null
+  direccion: string | null
+  distrito: string | null
+  ciudad: string | null
+  lat: number | null
+  lon: number | null
+  fed_a_cargo: string | null
+  plan_enlace: string | null
+  subplan_enlace: string | null
+  fecha_inicio_conectividad: string | null
+  proveedor_internet_pnce: string | null
+  fecha_instalacion_pnce: string | null
+  pnce_estado: string | null
+  mb: string | null
+  ambito: string | null
+  tipo_establecimiento: string | null
+  observaciones: string | null
+  contactos?: Contacto[]
+  id: string
+  [key: string]: any
+}
 
-// Cliente para uso en el lado del cliente (solo operaciones públicas)
-export const supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
+export type Contacto = {
+  cue: number
+  nombre: string | null
+  apellido: string | null
+  cargo: string | null
+  telefono: string | null
+  correo_institucional: string | null
+  fed_a_cargo: string | null
+  distrito: string | null
+  id: string
+  [key: string]: any
+}
 
-// Cliente para uso en el lado del servidor (operaciones privilegiadas)
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+// Tipo combinado para mostrar en la UI
+export type EstablecimientoConContacto = Omit<Establecimiento, "contactos"> & Partial<Contacto>
+
+// Función para crear el cliente de Supabase
+export function createClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error("Faltan las variables de entorno de Supabase")
+  }
+
+  return createClientBase(supabaseUrl, supabaseKey)
+}
+
+// Función para crear el cliente de Supabase con privilegios de administrador
+export function createSupabaseAdminClient() {
+  const supabaseUrl = process.env.SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error("Faltan las variables de entorno de Supabase")
+  }
+
+  return createClientBase(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+}
+
+export const supabaseClient = createClient()
+export const supabaseAdmin = createSupabaseAdminClient()
 
 // Función para generar UUIDs
-export function generateUUID() {
-  return crypto.randomUUID()
-}
-
-// Tipos para las tablas de Supabase actualizados según la estructura real
-export interface Establecimiento {
-  id: string // uuid - REQUERIDO
-  cue: number // bigint
-  nombre?: string | null // text (equivalente a ESTABLECIMIENTO en la hoja de cálculo)
-  distrito?: string | null // text
-  ciudad?: string | null // text
-  direccion?: string | null // text
-  lat?: number | null // double precision
-  lon?: number | null // double precision
-  predio?: string | null // text
-  fed_a_cargo?: string | null // text
-  plan_enlace?: string | null // text
-  subplan_enlace?: string | null // text
-  fecha_inicio_conectividad?: string | null // text
-  proveedor_internet_pnce?: string | null // text
-  fecha_instalacion_pnce?: string | null // text
-  pnce_tipo_mejora?: string | null // text
-  pnce_fecha_mejora?: string | null // text
-  pnce_estado?: string | null // text
-  pba_grupo_1_proveedor_internet?: string | null // text
-  pba_grupo_1_fecha_instalacion?: string | null // text
-  pba_grupo_1_estado?: string | null // text
-  pba_2019_proveedor_internet?: string | null // text
-  pba_2019_fecha_instalacion?: string | null // text
-  pba_2019_estado?: string | null // text
-  pba_grupo_2_a_proveedor_internet?: string | null // text
-  pba_grupo_2_a_fecha_instalacion?: string | null // text
-  pba_grupo_2_a_tipo_mejora?: string | null // text
-  pba_grupo_2_a_fecha_mejora?: string | null // text
-  pba_grupo_2_a_estado?: string | null // text
-  plan_piso_tecnologico?: string | null // text
-  proveedor_piso_tecnologico_cue?: string | null // text
-  fecha_terminado_piso_tecnologico_cue?: string | null // text
-  tipo_mejora?: string | null // text
-  fecha_mejora?: string | null // text
-  tipo_piso_instalado?: string | null // text
-  tipo?: string | null // text
-  observaciones?: string | null // text
-  tipo_establecimiento?: string | null // text
-  listado_conexion_internet?: string | null // text
-  estado_instalacion_pba?: string | null // text
-  proveedor_asignado_pba?: string | null // text
-  mb?: string | null // text
-  ambito?: string | null // text
-  cue_anterior?: string | null // text
-  reclamos_grupo_1_ani?: string | null // text
-  recurso_primario?: string | null // text
-  access_id?: string | null // text
-  // Campos adicionales que podrían existir en la base de datos
-  [key: string]: any
-}
-
-export interface Contacto {
-  id: string // uuid - REQUERIDO
-  cue?: number | null // bigint
-  nombre?: string | null // text
-  apellido?: string | null // text
-  correo?: string | null // text (equivalente a CORREO_INSTITUCIONAL en la hoja de cálculo)
-  telefono?: string | null // text
-  cargo?: string | null // text
-  // Campos adicionales que podrían existir en la base de datos
-  [key: string]: any
+export function generateUUID(): string {
+  return uuidv4()
 }

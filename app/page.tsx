@@ -1,11 +1,35 @@
-import SchoolSearch from "@/components/SchoolSearch"
-import SetupInstructions from "./setup-instructions"
-import { checkApiKeyConfigured } from "./api-key-check"
+"use client"
+
+import { useState } from "react"
+import { searchEstablecimientos } from "@/lib/actions"
+import SearchForm from "@/components/SearchForm"
+import SchoolCard from "@/components/SchoolCard"
 import Footer from "@/components/Footer"
 import ScrollToTopButton from "@/components/ScrollToTopButton"
+import type { EstablecimientoConContacto } from "@/lib/supabase"
 
-export default async function Home() {
-  const isApiKeyConfigured = await checkApiKeyConfigured()
+export default function Home() {
+  const [schools, setSchools] = useState<EstablecimientoConContacto[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [isSearched, setIsSearched] = useState(false)
+
+  const handleSearch = async (query: string) => {
+    try {
+      setError(null)
+      const results = await searchEstablecimientos(query)
+      setSchools(results)
+      setIsSearched(true)
+    } catch (err) {
+      console.error("Error al buscar:", err)
+      setError("Ocurrió un error al realizar la búsqueda. Por favor, intenta nuevamente.")
+      setSchools([])
+    }
+  }
+
+  const handleViewDetails = (cue: number) => {
+    // En una implementación completa, esto podría navegar a una página de detalles
+    console.log(`Ver detalles de escuela con CUE: ${cue}`)
+  }
 
   return (
     <main className="min-h-screen">
@@ -42,14 +66,35 @@ export default async function Home() {
           </div>
         </header>
 
-        {!isApiKeyConfigured && <SetupInstructions />}
+        <div className="mx-auto mb-8 max-w-2xl">
+          <SearchForm onSearch={handleSearch} />
+        </div>
 
-        <SchoolSearch />
+        {error && (
+          <div className="mb-6 rounded-xl bg-red-500/20 border border-red-500/30 p-4 text-white">
+            <p>{error}</p>
+          </div>
+        )}
+
+        {isSearched && schools.length === 0 && !error && (
+          <div className="mb-6 rounded-xl bg-amber-bg border border-amber-border p-4 text-amber-text">
+            <p>No se encontraron establecimientos con los criterios de búsqueda especificados.</p>
+          </div>
+        )}
+
+        {schools.length > 0 && (
+          <>
+            <h2 className="mb-4 text-xl font-semibold text-white">Resultados ({schools.length})</h2>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {schools.map((school) => (
+                <SchoolCard key={school.cue} school={school} onViewDetails={handleViewDetails} />
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <Footer />
-
-      {/* Botón para volver al inicio */}
       <ScrollToTopButton />
     </main>
   )

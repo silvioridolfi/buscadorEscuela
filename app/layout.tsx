@@ -3,13 +3,13 @@ import "./globals.css"
 import type { Metadata } from "next"
 import { Encode_Sans } from "next/font/google"
 import { Analytics } from "@vercel/analytics/react"
-import { Suspense } from "react" // Añadir esta importación
+import { Suspense } from "react"
 
 const encodeSans = Encode_Sans({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "Buscador de establecimientos educativos",
-  description: "Busca información de escuelas desde la base de datos de Google Sheets",
+  description: "Busca información de escuelas desde la base de datos de Supabase",
   icons: {
     icon: "/favicon.ico",
     apple: "/favicon.png",

@@ -1,10 +1,8 @@
-// Add a version number to help track deployments
-const APP_VERSION = "2.0.4" // Correcciones de imágenes y mapas
-// Generar versión automática basada en la fecha en formato latino (DD.MM.AAAA)
-const today = new Date()
-const AUTO_VERSION = `${today.getDate().toString().padStart(2, "0")}.${(today.getMonth() + 1).toString().padStart(2, "0")}.${today.getFullYear()}`
-
 export default function Footer() {
+  // Generar versión automática basada en la fecha en formato latino (DD.MM.AAAA)
+  const today = new Date()
+  const AUTO_VERSION = `${today.getDate().toString().padStart(2, "0")}.${(today.getMonth() + 1).toString().padStart(2, "0")}.${today.getFullYear()}`
+
   return (
     <footer className="w-full py-6 mt-16">
       <div className="max-w-6xl mx-auto px-4">
@@ -46,9 +44,7 @@ export default function Footer() {
         </div>
 
         {/* Version indicator - Estilo discreto */}
-        <div className="text-center text-white/30 text-xs mt-2">
-          v{APP_VERSION} ({AUTO_VERSION})
-        </div>
+        <div className="text-center text-white/30 text-xs mt-2">v2.0.5 ({AUTO_VERSION})</div>
 
         {/* Marca Silvio® - Mismo color que la versión */}
         <div className="text-center text-white/30 text-xs mt-1">Silvio®</div>
